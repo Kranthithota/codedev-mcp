@@ -3,10 +3,15 @@
  * Cross-references package lock files (package-lock.json, yarn.lock, pnpm-lock.yaml,
  * Cargo.lock, Pipfile.lock, go.sum) against known vulnerability patterns.
  * Checks for outdated packages, known-vulnerable version ranges, and security advisories.
+ * Integrates with npm audit for real-time vulnerability detection.
  */
 
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+
+const execFileAsync = promisify(execFile);
 
 export interface VulnDependency {
   name: string;
@@ -210,6 +215,97 @@ function parseGoSum(content: string): { name: string; version: string }[] {
 }
 
 /**
+ * Run npm audit and parse results.
+ * @param cwd - The working directory
+ * @returns Parsed npm audit vulnerabilities or null if audit fails
+ */
+async function runNpmAudit(cwd: string): Promise<VulnDependency[] | null> {
+  try {
+    // Check if package.json exists
+    const packageJsonPath = path.join(cwd, 'package.json');
+    await readFile(packageJsonPath, 'utf-8');
+
+    // Run npm audit --json
+    const { stdout } = await execFileAsync('npm', ['audit', '--json'], {
+      cwd,
+      timeout: 30000, // 30 second timeout
+      maxBuffer: 10 * 1024 * 1024, // 10MB buffer
+    });
+
+    const auditData = JSON.parse(stdout);
+    const vulns: VulnDependency[] = [];
+
+    // Parse npm audit v7+ format
+    if (auditData.vulnerabilities) {
+      for (const [pkgName, vulnInfo] of Object.entries(auditData.vulnerabilities)) {
+        const info = vulnInfo as {
+          severity?: string;
+          via?: Array<string | { title?: string; url?: string }>;
+          effects?: string[];
+          range?: string;
+          fixAvailable?: boolean | { name?: string; version?: string };
+        };
+
+        // Get severity (npm audit uses: critical, high, moderate, low, info)
+        const severity = (info.severity || 'info').toLowerCase();
+        const mappedSeverity: VulnDependency['severity'] =
+          severity === 'critical'
+            ? 'critical'
+            : severity === 'high'
+              ? 'high'
+              : severity === 'moderate'
+                ? 'medium'
+                : severity === 'low'
+                  ? 'low'
+                  : 'info';
+
+        // Get CVE or advisory info
+        const via = info.via || [];
+        const cveInfo = via.find((v) => typeof v === 'object' && v.title) as { title?: string; url?: string } | undefined;
+        const reason = cveInfo?.title || via.find((v) => typeof v === 'string') || 'Known vulnerability';
+
+        // Get fix recommendation
+        let recommendation: string | undefined;
+        if (info.fixAvailable) {
+          if (typeof info.fixAvailable === 'object' && info.fixAvailable.name && info.fixAvailable.version) {
+            recommendation = `Upgrade ${info.fixAvailable.name} to ${info.fixAvailable.version}`;
+          } else if (info.fixAvailable === true) {
+            recommendation = 'Run npm audit fix';
+          }
+        }
+
+        // Extract version from package name (format: package@version or package@version@version)
+        // npm audit can return nested dependencies like: package@1.0.0@2.0.0
+        const parts = pkgName.split('@');
+        const pkgNameOnly = parts[0];
+        // Get the actual installed version (usually the last part)
+        const version = parts.length > 1 ? parts[parts.length - 1] : 'unknown';
+
+        vulns.push({
+          name: pkgNameOnly,
+          version,
+          severity: mappedSeverity,
+          reason: String(reason),
+          file: 'package-lock.json',
+          ecosystem: 'npm',
+          recommendation,
+        });
+      }
+    }
+
+    return vulns;
+  } catch (error) {
+    // npm audit might fail if:
+    // - npm is not installed
+    // - package.json doesn't exist
+    // - network issues
+    // - audit database unavailable
+    // Return null to fall back to static patterns
+    return null;
+  }
+}
+
+/**
  * Main vulnerability scan function.
  * @param cwd - The working directory to scan
  * @returns Vulnerability scan results with findings and summary
@@ -221,37 +317,62 @@ export async function scanDependencyVulns(cwd: string): Promise<DepVulnResult> {
   let totalDeps = 0;
   let outdatedCount = 0;
 
-  // Scan npm lock files
-  for (const lockFile of ['package-lock.json', 'yarn.lock', 'pnpm-lock.yaml']) {
-    try {
-      const content = await readFile(path.join(cwd, lockFile), 'utf-8');
-      lockFiles.push(lockFile);
-      ecosystems.add('npm');
+  // Try npm audit first for accurate vulnerability detection
+  const npmAuditVulns = await runNpmAudit(cwd);
+  const hasNpmAuditResults = npmAuditVulns && npmAuditVulns.length > 0;
+  
+  if (hasNpmAuditResults) {
+    vulnerabilities.push(...npmAuditVulns);
+    ecosystems.add('npm');
+    if (!lockFiles.includes('package-lock.json')) {
+      lockFiles.push('package-lock.json');
+    }
+  }
 
-      // Only parse JSON lock files for now
-      if (lockFile === 'package-lock.json') {
-        const deps = parseNpmLock(content);
-        totalDeps += deps.length;
+  // Scan npm lock files (only if npm audit didn't run or failed)
+  if (!hasNpmAuditResults) {
+    for (const lockFile of ['package-lock.json', 'yarn.lock', 'pnpm-lock.yaml']) {
+      try {
+        const content = await readFile(path.join(cwd, lockFile), 'utf-8');
+        if (!lockFiles.includes(lockFile)) lockFiles.push(lockFile);
+        ecosystems.add('npm');
 
-        for (const dep of deps) {
-          for (const pattern of KNOWN_VULN_PATTERNS) {
-            if (pattern.name.test(dep.name) && pattern.maxSafe && semverLessThan(dep.version, pattern.maxSafe)) {
-              vulnerabilities.push({
-                name: dep.name,
-                version: dep.version,
-                severity: pattern.severity,
-                reason: pattern.reason,
-                file: lockFile,
-                ecosystem: 'npm',
-                recommendation: `Upgrade to >= ${pattern.maxSafe}`,
-              });
-              if (pattern.severity !== 'info') outdatedCount++;
+        // Only parse JSON lock files for now
+        if (lockFile === 'package-lock.json') {
+          const deps = parseNpmLock(content);
+          totalDeps += deps.length;
+
+          for (const dep of deps) {
+            for (const pattern of KNOWN_VULN_PATTERNS) {
+              if (pattern.name.test(dep.name) && pattern.maxSafe && semverLessThan(dep.version, pattern.maxSafe)) {
+                vulnerabilities.push({
+                  name: dep.name,
+                  version: dep.version,
+                  severity: pattern.severity,
+                  reason: pattern.reason,
+                  file: lockFile,
+                  ecosystem: 'npm',
+                  recommendation: `Upgrade to >= ${pattern.maxSafe}`,
+                });
+                if (pattern.severity !== 'info') outdatedCount++;
+              }
             }
           }
         }
+      } catch {
+        /* file doesn't exist */
       }
+    }
+  }
+  
+  // Always count total deps from lock file if it exists
+  if (hasNpmAuditResults) {
+    try {
+      const content = await readFile(path.join(cwd, 'package-lock.json'), 'utf-8');
+      const deps = parseNpmLock(content);
+      totalDeps += deps.length;
     } catch {
-      /* file doesn't exist */
+      /* skip */
     }
   }
 

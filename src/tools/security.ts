@@ -99,7 +99,7 @@ export function registerSecurityTools(server: McpServer) {
               text: `security_scan failed: ${(error as Error).message}. Verify the project directory is accessible.`,
             },
           ],
-          structuredContent: { issues: [], total: 0, severity: { critical: 0, high: 0, medium: 0, low: 0, info: 0 } },
+          structuredContent: { issues: [], total: 0, severity: { critical: 0, high: 0, medium: 0, low: 0 } },
         };
       }
     },
