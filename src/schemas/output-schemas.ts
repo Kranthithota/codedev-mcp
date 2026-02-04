@@ -326,10 +326,8 @@ export const outputSchemas = {
     summary: z.record(z.unknown()),
   },
   scaffold: {
-    template: z.string(),
-    fileName: z.string(),
-    language: z.string(),
-    generatedCode: z.string(),
+    action: z.string(),
+    data: z.record(z.unknown()),
   },
   git_hooks: {
     action: z.string(),

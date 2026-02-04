@@ -96,7 +96,7 @@ export function registerSearchTools(server: McpServer) {
               text: `search_code failed: ${(error as Error).message}. Verify the directory exists and the pattern is valid. For regex, ensure proper escaping.`,
             },
           ],
-          isError: true,
+          structuredContent: { matches: [], total: 0 },
         };
       }
     },
@@ -191,7 +191,7 @@ export function registerSearchTools(server: McpServer) {
               text: `search_symbols failed: ${(error as Error).message}. Try increasing max_files for large codebases, or narrow with language/directory filters.`,
             },
           ],
-          isError: true,
+          structuredContent: { symbols: [], total: 0 },
         };
       }
     },
@@ -266,7 +266,7 @@ export function registerSearchTools(server: McpServer) {
               text: `find_references failed: ${(error as Error).message}. Verify the symbol name is correct. Try search_code with a broader pattern.`,
             },
           ],
-          isError: true,
+          structuredContent: { symbol: params.symbol || '', references: [], total: 0 },
         };
       }
     },
@@ -339,7 +339,7 @@ export function registerSearchTools(server: McpServer) {
               text: `semantic_search failed: ${(error as Error).message}. Try search_code for exact text matching.`,
             },
           ],
-          isError: true,
+          structuredContent: { matches: [], total: 0 },
         };
       }
     },

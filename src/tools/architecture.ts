@@ -53,7 +53,7 @@ export function registerArchitectureTools(server: McpServer) {
                   message: v.message,
                   severity: v.severity,
                 })) || [],
-              rulesChecked: result.rulesChecked || [],
+              rulesChecked: result.rulesChecked ?? 0,
               passed: result.passed || false,
             },
           };
@@ -61,7 +61,7 @@ export function registerArchitectureTools(server: McpServer) {
       } catch (error: unknown) {
         return {
           content: [{ type: 'text', text: `architecture_check failed: ${(error as Error).message}` }],
-          isError: true,
+          structuredContent: { violations: [], rulesChecked: 0 },
         };
       }
     },
@@ -139,7 +139,10 @@ export function registerArchitectureTools(server: McpServer) {
           };
         });
       } catch (error: unknown) {
-        return { content: [{ type: 'text', text: `db_schema failed: ${(error as Error).message}` }], isError: true };
+        return {
+          content: [{ type: 'text', text: `db_schema failed: ${(error as Error).message}` }],
+          structuredContent: { tables: [], relationships: [], orm: 'unknown' },
+        };
       }
     },
   );
@@ -193,7 +196,7 @@ export function registerArchitectureTools(server: McpServer) {
       } catch (error: unknown) {
         return {
           content: [{ type: 'text', text: `api_contracts failed: ${(error as Error).message}` }],
-          isError: true,
+          structuredContent: { endpoints: [], totalEndpoints: 0 },
         };
       }
     },

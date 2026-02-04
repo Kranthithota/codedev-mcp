@@ -91,7 +91,7 @@ export function registerSecurityTools(server: McpServer) {
               text: `security_scan failed: ${(error as Error).message}. Verify the project directory is accessible.`,
             },
           ],
-          isError: true,
+          structuredContent: { issues: [], total: 0, severity: { critical: 0, high: 0, medium: 0, low: 0, info: 0 } },
         };
       }
     },
@@ -145,7 +145,12 @@ export function registerSecurityTools(server: McpServer) {
       } catch (error: unknown) {
         return {
           content: [{ type: 'text', text: `dep_vuln_scan failed: ${(error as Error).message}` }],
-          isError: true,
+          structuredContent: {
+            vulnerabilities: [],
+            totalDeps: 0,
+            outdatedCount: 0,
+            summary: { critical: 0, high: 0, medium: 0, low: 0, info: 0 },
+          },
         };
       }
     },

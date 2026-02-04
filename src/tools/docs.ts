@@ -105,7 +105,7 @@ export function registerDocsTools(server: McpServer) {
               text: `code_docs failed: ${(error as Error).message}. Verify the file exists and is a supported language.`,
             },
           ],
-          isError: true,
+          structuredContent: { action: 'extract', data: { file: params.file || '', entries: [], total: 0 } },
         };
       }
     },

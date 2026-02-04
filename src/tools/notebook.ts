@@ -33,10 +33,10 @@ export function registerNotebookTools(server: McpServer) {
         if (params.action === 'list') {
           const notebooks = await findNotebooks(CWD);
           if (notebooks.length === 0)
-          return {
-            content: [{ type: 'text', text: 'No Jupyter notebooks (.ipynb) found in the project.' }],
-            structuredContent: { action: 'list', data: { notebooks: [], count: 0 } },
-          };
+            return {
+              content: [{ type: 'text', text: 'No Jupyter notebooks (.ipynb) found in the project.' }],
+              structuredContent: { action: 'list', data: { notebooks: [], count: 0 } },
+            };
           return {
             content: [{ type: 'text', text: `Found ${notebooks.length} notebooks:\n\n${notebooks.join('\n')}` }],
             structuredContent: { action: 'list', data: { notebooks, count: notebooks.length } },
@@ -46,7 +46,7 @@ export function registerNotebookTools(server: McpServer) {
         if (!params.file)
           return {
             content: [{ type: 'text', text: 'File path required. Use action "list" to find notebooks.' }],
-            isError: true,
+            structuredContent: { action: params.action || 'error', data: { notebooks: [], count: 0 } },
           };
         const filePath = safePath(params.file);
         const notebook = await parseNotebook(filePath);
@@ -95,7 +95,10 @@ export function registerNotebookTools(server: McpServer) {
           }
 
           default:
-            return { content: [{ type: 'text', text: `Unknown action: ${params.action}` }], isError: true };
+            return {
+              content: [{ type: 'text', text: `Unknown action: ${params.action}` }],
+              structuredContent: { action: params.action || 'unknown', data: {} },
+            };
         }
       } catch (error: unknown) {
         return {
@@ -105,7 +108,7 @@ export function registerNotebookTools(server: McpServer) {
               text: `notebook_analyze failed: ${(error as Error).message}. Verify the file is a valid .ipynb notebook.`,
             },
           ],
-          isError: true,
+          structuredContent: { action: params.action || 'error', data: {} },
         };
       }
     },

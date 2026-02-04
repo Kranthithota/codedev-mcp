@@ -46,7 +46,10 @@ export function registerGitTools(server: McpServer) {
     async (params) => {
       try {
         if (!(await isGitRepo(CWD))) {
-          return { content: [{ type: 'text', text: 'Not a git repository.' }], isError: true };
+          return {
+            content: [{ type: 'text', text: 'Not a git repository.' }],
+            structuredContent: { action: 'log', entries: [], data: 'Not a git repository' },
+          };
         }
         const safeFile = params.file ? path.relative(CWD, safePath(params.file)) : undefined;
 
@@ -84,7 +87,10 @@ export function registerGitTools(server: McpServer) {
           },
         };
       } catch (error: unknown) {
-        return { content: [{ type: 'text', text: `git_log failed: ${(error as Error).message}` }], isError: true };
+        return {
+          content: [{ type: 'text', text: `git_log failed: ${(error as Error).message}` }],
+          structuredContent: { action: 'log', entries: [], data: '' },
+        };
       }
     },
   );
@@ -109,7 +115,10 @@ export function registerGitTools(server: McpServer) {
     async (params) => {
       try {
         if (!(await isGitRepo(CWD))) {
-          return { content: [{ type: 'text', text: 'Not a git repository.' }], isError: true };
+          return {
+            content: [{ type: 'text', text: 'Not a git repository.' }],
+            structuredContent: { action: 'log', entries: [], data: 'Not a git repository' },
+          };
         }
         const safeFile = params.file ? path.relative(CWD, safePath(params.file)) : undefined;
         const diff = await getGitDiff(CWD, {
@@ -124,7 +133,10 @@ export function registerGitTools(server: McpServer) {
           structuredContent: { action: 'diff', data: diff || '' },
         };
       } catch (error: unknown) {
-        return { content: [{ type: 'text', text: `git_diff failed: ${(error as Error).message}` }], isError: true };
+        return {
+          content: [{ type: 'text', text: `git_diff failed: ${(error as Error).message}` }],
+          structuredContent: { action: 'diff', data: '' },
+        };
       }
     },
   );
@@ -147,7 +159,10 @@ export function registerGitTools(server: McpServer) {
     async (params) => {
       try {
         if (!(await isGitRepo(CWD))) {
-          return { content: [{ type: 'text', text: 'Not a git repository.' }], isError: true };
+          return {
+            content: [{ type: 'text', text: 'Not a git repository.' }],
+            structuredContent: { action: 'log', entries: [], data: 'Not a git repository' },
+          };
         }
         const safeFile = path.relative(CWD, safePath(params.file));
         const blame = await getGitBlame(CWD, safeFile, {
@@ -165,7 +180,10 @@ export function registerGitTools(server: McpServer) {
           },
         };
       } catch (error: unknown) {
-        return { content: [{ type: 'text', text: `git_blame failed: ${(error as Error).message}` }], isError: true };
+        return {
+          content: [{ type: 'text', text: `git_blame failed: ${(error as Error).message}` }],
+          structuredContent: { action: 'blame', entries: [] },
+        };
       }
     },
   );
@@ -184,7 +202,10 @@ export function registerGitTools(server: McpServer) {
     async () => {
       try {
         if (!(await isGitRepo(CWD))) {
-          return { content: [{ type: 'text', text: 'Not a git repository.' }], isError: true };
+          return {
+            content: [{ type: 'text', text: 'Not a git repository.' }],
+            structuredContent: { action: 'log', entries: [], data: 'Not a git repository' },
+          };
         }
         const status = await getGitStatus(CWD);
         const branch = await getGitBranch(CWD);
@@ -193,7 +214,10 @@ export function registerGitTools(server: McpServer) {
           structuredContent: { action: 'status', data: `${branch}\n${status || ''}` },
         };
       } catch (error: unknown) {
-        return { content: [{ type: 'text', text: `git_status failed: ${(error as Error).message}` }], isError: true };
+        return {
+          content: [{ type: 'text', text: `git_status failed: ${(error as Error).message}` }],
+          structuredContent: { action: 'status', data: '' },
+        };
       }
     },
   );
@@ -212,7 +236,10 @@ export function registerGitTools(server: McpServer) {
     async () => {
       try {
         if (!(await isGitRepo(CWD))) {
-          return { content: [{ type: 'text', text: 'Not a git repository.' }], isError: true };
+          return {
+            content: [{ type: 'text', text: 'Not a git repository.' }],
+            structuredContent: { action: 'log', entries: [], data: 'Not a git repository' },
+          };
         }
         const branches = await getGitBranches(CWD);
         const current = await getGitBranch(CWD);
@@ -225,7 +252,10 @@ export function registerGitTools(server: McpServer) {
           },
         };
       } catch (error: unknown) {
-        return { content: [{ type: 'text', text: `git_branches failed: ${(error as Error).message}` }], isError: true };
+        return {
+          content: [{ type: 'text', text: `git_branches failed: ${(error as Error).message}` }],
+          structuredContent: { action: 'branches', entries: [] },
+        };
       }
     },
   );
@@ -247,7 +277,10 @@ export function registerGitTools(server: McpServer) {
     async (params) => {
       try {
         if (!(await isGitRepo(CWD))) {
-          return { content: [{ type: 'text', text: 'Not a git repository.' }], isError: true };
+          return {
+            content: [{ type: 'text', text: 'Not a git repository.' }],
+            structuredContent: { action: 'log', entries: [], data: 'Not a git repository' },
+          };
         }
         const ref = params.ref || 'HEAD';
         const output = await getGitShow(CWD, ref, params.stat);
@@ -256,7 +289,10 @@ export function registerGitTools(server: McpServer) {
           structuredContent: { action: 'show', data: output.slice(0, 10000) },
         };
       } catch (error: unknown) {
-        return { content: [{ type: 'text', text: `git_show failed: ${(error as Error).message}` }], isError: true };
+        return {
+          content: [{ type: 'text', text: `git_show failed: ${(error as Error).message}` }],
+          structuredContent: { action: 'show', data: '' },
+        };
       }
     },
   );
@@ -277,7 +313,10 @@ export function registerGitTools(server: McpServer) {
     async (params) => {
       try {
         if (!(await isGitRepo(CWD))) {
-          return { content: [{ type: 'text', text: 'Not a git repository.' }], isError: true };
+          return {
+            content: [{ type: 'text', text: 'Not a git repository.' }],
+            structuredContent: { action: 'log', entries: [], data: 'Not a git repository' },
+          };
         }
         const safeFile = params.file ? path.relative(CWD, safePath(params.file)) : undefined;
         const contribs = await getContributors(CWD, safeFile);
@@ -292,7 +331,7 @@ export function registerGitTools(server: McpServer) {
       } catch (error: unknown) {
         return {
           content: [{ type: 'text', text: `git_contributors failed: ${(error as Error).message}` }],
-          isError: true,
+          structuredContent: { action: 'contributors', entries: [] },
         };
       }
     },
@@ -411,7 +450,7 @@ export function registerGitTools(server: McpServer) {
               text: `change_impact failed: ${(error as Error).message}. Ensure this is a git repository or provide explicit file paths.`,
             },
           ],
-          isError: true,
+          structuredContent: { risk: 'unknown', affected: [], summary: '' },
         };
       }
     },
@@ -485,7 +524,11 @@ export function registerGitTools(server: McpServer) {
               text: `branch_compare failed: ${(error as Error).message}. Ensure you're in a git repository with the specified branches.`,
             },
           ],
-          isError: true,
+          structuredContent: {
+            base: params.base || 'main',
+            compare: params.compare || 'HEAD',
+            stats: { filesAdded: 0, filesModified: 0, filesDeleted: 0 },
+          },
         };
       }
     },
@@ -542,7 +585,10 @@ export function registerGitTools(server: McpServer) {
           };
         });
       } catch (error: unknown) {
-        return { content: [{ type: 'text', text: `git_hooks failed: ${(error as Error).message}` }], isError: true };
+        return {
+          content: [{ type: 'text', text: `git_hooks failed: ${(error as Error).message}` }],
+          structuredContent: { action: 'error', hookPath: undefined, installed: false },
+        };
       }
     },
   );

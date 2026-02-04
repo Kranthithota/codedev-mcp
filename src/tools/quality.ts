@@ -38,12 +38,15 @@ export function registerQualityTools(server: McpServer) {
           content: [{ type: 'text', text: `Found ${results.length} TODOs:\n\n${output}` }],
           structuredContent: {
             check: 'todos',
-            matches: results.map((r) => ({ file: r.file, line: r.line, text: r.text.trim() })),
+            matches: results.map((r) => ({ file: r.file, line: r.line, match: r.text.trim() })),
             total: results.length,
           },
         };
       } catch (error: unknown) {
-        return { content: [{ type: 'text', text: `find_todos failed: ${(error as Error).message}` }], isError: true };
+        return {
+          content: [{ type: 'text', text: `find_todos failed: ${(error as Error).message}` }],
+          structuredContent: { check: 'todos', matches: [], total: 0 },
+        };
       }
     },
   );
@@ -78,14 +81,14 @@ export function registerQualityTools(server: McpServer) {
           content: [{ type: 'text', text: `Found ${results.length} debug/log statements:\n\n${output}` }],
           structuredContent: {
             check: 'debug_logs',
-            matches: results.map((r) => ({ file: r.file, line: r.line, text: r.text.trim() })),
+            matches: results.map((r) => ({ file: r.file, line: r.line, match: r.text.trim() })),
             total: results.length,
           },
         };
       } catch (error: unknown) {
         return {
           content: [{ type: 'text', text: `find_debug_logs failed: ${(error as Error).message}` }],
-          isError: true,
+          structuredContent: { check: 'debug_logs', matches: [], total: 0 },
         };
       }
     },
@@ -121,12 +124,15 @@ export function registerQualityTools(server: McpServer) {
           content: [{ type: 'text', text: `Found ${results.length} potential hardcoded secrets:\n\n${output}` }],
           structuredContent: {
             check: 'secrets',
-            matches: results.map((r) => ({ file: r.file, line: r.line, text: r.text.trim() })),
+            matches: results.map((r) => ({ file: r.file, line: r.line, match: r.text.trim() })),
             total: results.length,
           },
         };
       } catch (error: unknown) {
-        return { content: [{ type: 'text', text: `find_secrets failed: ${(error as Error).message}` }], isError: true };
+        return {
+          content: [{ type: 'text', text: `find_secrets failed: ${(error as Error).message}` }],
+          structuredContent: { check: 'secrets', matches: [], total: 0 },
+        };
       }
     },
   );
@@ -155,7 +161,7 @@ export function registerQualityTools(server: McpServer) {
         const exceptPattern = 'except:[[:space:]]*pass';
         // Pattern 3: rescue => nil (Ruby)
         const rescuePattern = 'rescue[[:space:]]*=>[[:space:]]*nil';
-        
+
         const catchResults = await searchCode({
           cwd: searchCwd,
           pattern: catchPattern1,
@@ -164,7 +170,7 @@ export function registerQualityTools(server: McpServer) {
           maxResults: 50,
           contextLines: 1,
         });
-        
+
         const exceptResults = await searchCode({
           cwd: searchCwd,
           pattern: exceptPattern,
@@ -173,7 +179,7 @@ export function registerQualityTools(server: McpServer) {
           maxResults: 50,
           contextLines: 1,
         });
-        
+
         const rescueResults = await searchCode({
           cwd: searchCwd,
           pattern: rescuePattern,
@@ -182,25 +188,25 @@ export function registerQualityTools(server: McpServer) {
           maxResults: 50,
           contextLines: 1,
         });
-        
+
         // Combine and deduplicate results
         const allResults = [...catchResults, ...exceptResults, ...rescueResults];
-        const results = allResults.filter((r, i, arr) => 
-          arr.findIndex((other) => other.file === r.file && other.line === r.line) === i
+        const results = allResults.filter(
+          (r, i, arr) => arr.findIndex((other) => other.file === r.file && other.line === r.line) === i,
         );
         const output = results.map((r) => `${r.file}:${r.line} │ ${r.text.trim()}`).join('\n');
         return {
           content: [{ type: 'text', text: `Found ${results.length} empty/swallowed error handlers:\n\n${output}` }],
           structuredContent: {
             check: 'empty_catches',
-            matches: results.map((r) => ({ file: r.file, line: r.line, text: r.text.trim() })),
+            matches: results.map((r) => ({ file: r.file, line: r.line, match: r.text.trim() })),
             total: results.length,
           },
         };
       } catch (error: unknown) {
         return {
           content: [{ type: 'text', text: `find_empty_catches failed: ${(error as Error).message}` }],
-          isError: true,
+          structuredContent: { check: 'empty_catches', matches: [], total: 0 },
         };
       }
     },
@@ -295,14 +301,14 @@ export function registerQualityTools(server: McpServer) {
             content: [{ type: 'text', text: `Found ${results.length} occurrences of pattern:\n\n${output}` }],
             structuredContent: {
               check: 'duplicates',
-              matches: results.map((r) => ({ file: r.file, line: r.line, text: r.text.trim() })),
+              matches: results.map((r) => ({ file: r.file, line: r.line, match: r.text.trim() })),
               total: results.length,
             },
           };
         } catch (error: unknown) {
           return {
             content: [{ type: 'text', text: `find_duplicates failed: ${(error as Error).message}` }],
-            isError: true,
+            structuredContent: { check: 'duplicates', matches: [], total: 0 },
           };
         }
       }

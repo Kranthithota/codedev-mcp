@@ -58,7 +58,10 @@ export function registerPerformanceTools(server: McpServer) {
           };
         });
       } catch (error: unknown) {
-        return { content: [{ type: 'text', text: `perf_profile failed: ${(error as Error).message}` }], isError: true };
+        return {
+          content: [{ type: 'text', text: `perf_profile failed: ${(error as Error).message}` }],
+          structuredContent: { entries: [], summary: {} },
+        };
       }
     },
   );

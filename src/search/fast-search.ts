@@ -213,6 +213,7 @@ async function searchWithGrep(opts: SearchOptions): Promise<SearchResult[]> {
   if (!opts.caseSensitive) args.push('-i');
   if (opts.wholeWord) args.push('-w');
   if (!opts.isRegex) args.push('-F');
+  else args.push('-E');
   if (opts.maxResults) args.push('-m', String(opts.maxResults));
   if (opts.contextLines) {
     args.push('-B', String(opts.contextLines));

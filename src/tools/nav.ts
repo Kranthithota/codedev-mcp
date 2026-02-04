@@ -140,7 +140,7 @@ export function registerNavTools(server: McpServer) {
                 text: `read_files failed: ${(error as Error).message}. Verify the file path exists. Use file_tree to discover files or search_code to find files by content.`,
               },
             ],
-            isError: true,
+            structuredContent: { files: [] },
           };
         }
       }
@@ -181,7 +181,7 @@ export function registerNavTools(server: McpServer) {
             text: 'read_files requires either "path" (single file) or "paths" (batch). Use file_tree to discover available files.',
           },
         ],
-        isError: true,
+        structuredContent: { files: [] },
       };
     },
   );
@@ -308,7 +308,7 @@ export function registerNavTools(server: McpServer) {
               text: `file_tree failed: ${(error as Error).message}. Verify the directory path exists and is accessible.`,
             },
           ],
-          isError: true,
+          structuredContent: { tree: '', fileCount: 0 },
         };
       }
     },

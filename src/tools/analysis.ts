@@ -58,7 +58,7 @@ export function registerAnalysisTools(server: McpServer) {
               text: `codebase_map failed: ${(error as Error).message}. Ensure the working directory is a valid project. Check that the path is accessible.`,
             },
           ],
-          isError: true,
+          structuredContent: { summary: '', tree: '' },
         };
       }
     },
@@ -100,7 +100,7 @@ export function registerAnalysisTools(server: McpServer) {
               text: `analyze_file failed: ${(error as Error).message}. Verify the file path is correct and relative to the project root. Use file_tree to list available files.`,
             },
           ],
-          isError: true,
+          structuredContent: { file: params.path || '', language: 'unknown', lines: 0, outline: '' },
         };
       }
     },
@@ -189,7 +189,7 @@ export function registerAnalysisTools(server: McpServer) {
               text: `dependency_graph failed: ${(error as Error).message}. Verify file/directory exists. Use file_tree to discover project structure.`,
             },
           ],
-          isError: true,
+          structuredContent: { file: params.file || '', imports: [], importers: [] },
         };
       }
     },
@@ -313,7 +313,7 @@ export function registerAnalysisTools(server: McpServer) {
               text: `code_metrics failed: ${(error as Error).message}. Verify the path exists. For directories, ensure it contains recognized source files.`,
             },
           ],
-          isError: true,
+          structuredContent: { totalFiles: 0, totalLines: 0, languages: {}, blankLines: 0, commentLines: 0 },
         };
       }
     },
@@ -417,7 +417,7 @@ export function registerAnalysisTools(server: McpServer) {
               text: `call_graph failed: ${(error as Error).message}. Verify the file exists. Use file_tree to discover files.`,
             },
           ],
-          isError: true,
+          structuredContent: { file: params.file || '', functions: [] },
         };
       }
     },
@@ -448,7 +448,7 @@ export function registerAnalysisTools(server: McpServer) {
           const testFiles = await findTestFiles(CWD);
           return {
             content: [{ type: 'text', text: `Found ${testFiles.length} test files:\n\n${testFiles.join('\n')}` }],
-            structuredContent: { action: 'test_files', data: testFiles },
+            structuredContent: { action: 'test_files', data: { files: testFiles } },
           };
         }
 
@@ -461,7 +461,7 @@ export function registerAnalysisTools(server: McpServer) {
                 text: 'No coverage data found. Run your test suite with coverage enabled first (e.g. "jest --coverage", "pytest --cov", "go test -coverprofile"). Supported formats: lcov, istanbul JSON, cobertura XML.',
               },
             ],
-            structuredContent: { action: 'summary', data: [] },
+            structuredContent: { action: 'summary', data: { files: [] } },
           };
         }
 
@@ -484,11 +484,13 @@ export function registerAnalysisTools(server: McpServer) {
               content: [{ type: 'text', text: output }],
               structuredContent: {
                 action: 'summary',
-                data: coverage.files.slice(0, 15).map((f) => ({
-                  file: f.file,
-                  linesPercent: f.lines.percentage,
-                  funcsPercent: f.functions.percentage,
-                })),
+                data: {
+                  files: coverage.files.slice(0, 15).map((f) => ({
+                    file: f.file,
+                    linesPercent: f.lines.percentage,
+                    funcsPercent: f.functions.percentage,
+                  })),
+                },
               },
             };
           }
@@ -497,7 +499,7 @@ export function registerAnalysisTools(server: McpServer) {
             if (!params.file)
               return {
                 content: [{ type: 'text', text: 'File path required for file-specific coverage.' }],
-                isError: true,
+                structuredContent: { action: 'file', data: {} },
               };
             const fc = getFileCoverage(coverage, params.file);
             if (!fc)
@@ -508,7 +510,7 @@ export function registerAnalysisTools(server: McpServer) {
                     text: `No coverage data for "${params.file}". Ensure the file is included in coverage reports.`,
                   },
                 ],
-                structuredContent: { action: 'file', data: [] },
+                structuredContent: { action: 'file', data: { files: [] } },
               };
 
             let output = `Coverage for ${fc.file}:\n`;
@@ -523,7 +525,11 @@ export function registerAnalysisTools(server: McpServer) {
               content: [{ type: 'text', text: output }],
               structuredContent: {
                 action: 'file',
-                data: [{ file: params.file, linesPercent: fc.lines.percentage, funcsPercent: fc.functions.percentage }],
+                data: {
+                  files: [
+                    { file: params.file, linesPercent: fc.lines.percentage, funcsPercent: fc.functions.percentage },
+                  ],
+                },
               },
             };
           }
@@ -532,12 +538,15 @@ export function registerAnalysisTools(server: McpServer) {
             const untested = getUntestedFiles(coverage);
             return {
               content: [{ type: 'text', text: `${untested.length} files with 0% coverage:\n\n${untested.join('\n')}` }],
-              structuredContent: { action: 'untested', data: untested },
+              structuredContent: { action: 'untested', data: { files: untested } },
             };
           }
 
           default:
-            return { content: [{ type: 'text', text: `Unknown action: ${params.action}` }], isError: true };
+            return {
+              content: [{ type: 'text', text: `Unknown action: ${params.action}` }],
+              structuredContent: { action: params.action || 'unknown', data: {} },
+            };
         }
       } catch (error: unknown) {
         return {
@@ -547,7 +556,7 @@ export function registerAnalysisTools(server: McpServer) {
               text: `test_coverage failed: ${(error as Error).message}. Ensure coverage reports exist in the project.`,
             },
           ],
-          isError: true,
+          structuredContent: { action: params.action || 'error', data: {} },
         };
       }
     },

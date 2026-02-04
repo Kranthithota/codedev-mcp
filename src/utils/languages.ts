@@ -61,8 +61,22 @@ const EXT_MAP: Record<string, string> = {
   '.nim': 'nim',
   '.swift': 'swift',
   '.d': 'dlang',
+  '.cr': 'crystal',
+  '.v': 'v',
+  '.pas': 'pascal',
+  '.pp': 'pascal',
+  '.bas': 'basic',
+  '.vb': 'vbnet',
+  '.vbs': 'vbscript',
+  '.asm': 'assembly',
+  '.s': 'assembly',
+  '.S': 'assembly',
+  '.asmx': 'assembly',
+  '.wat': 'webassembly',
+  '.wasm': 'webassembly',
   // Scripting
   '.rb': 'ruby',
+  '.rake': 'ruby',
   '.php': 'php',
   '.pl': 'perl',
   '.pm': 'perl',
@@ -125,6 +139,47 @@ const EXT_MAP: Record<string, string> = {
   '.rst': 'rst',
   '.txt': 'text',
   '.dockerfile': 'dockerfile',
+  // Database & Query
+  '.prisma': 'prisma',
+  '.dbml': 'dbml',
+  '.mdb': 'access',
+  '.accdb': 'access',
+  // Build & Config
+  '.cmake': 'cmake',
+  '.makefile': 'makefile',
+  '.gradle': 'gradle',
+  '.maven': 'maven',
+  '.pom': 'maven',
+  '.sbt': 'scala',
+  '.csproj': 'csharp',
+  '.sln': 'csharp',
+  '.vcxproj': 'cpp',
+  '.xcodeproj': 'objectivec',
+  '.pbxproj': 'objectivec',
+  // Documentation
+  '.adoc': 'asciidoc',
+  '.asciidoc': 'asciidoc',
+  '.tex': 'latex',
+  '.ltx': 'latex',
+  // Other
+  '.coffee': 'coffeescript',
+  '.litcoffee': 'coffeescript',
+  '.iced': 'coffeescript',
+  '.elm': 'elm',
+  '.re': 'reason',
+  '.rei': 'reason',
+  '.res': 'rescript',
+  '.resi': 'rescript',
+  '.purs': 'purescript',
+  '.gleam': 'gleam',
+  '.heex': 'elixir',
+  '.eex': 'elixir',
+  '.leex': 'elixir',
+  '.nix': 'nix',
+  '.dhall': 'dhall',
+  '.cue': 'cue',
+  '.bicep': 'bicep',
+  '.pkl': 'pkl',
 };
 
 /**
@@ -140,6 +195,26 @@ export function detectLanguage(filePath: string): string {
   if (lower.endsWith('cmakelists.txt') || lower.endsWith('.cmake')) return 'cmake';
   if (lower.endsWith('rakefile') || lower.endsWith('gemfile')) return 'ruby';
   if (lower.endsWith('cargo.toml') || lower.endsWith('cargo.lock')) return 'toml';
+  if (lower.endsWith('requirements.txt') || lower.endsWith('setup.py') || lower.endsWith('pipfile')) return 'python';
+  if (lower.endsWith('go.mod') || lower.endsWith('go.sum')) return 'go';
+  if (lower.endsWith('composer.json') || lower.endsWith('composer.lock')) return 'php';
+  if (
+    lower.endsWith('package.json') ||
+    lower.endsWith('package-lock.json') ||
+    lower.endsWith('yarn.lock') ||
+    lower.endsWith('pnpm-lock.yaml')
+  )
+    return 'json';
+  if (lower.endsWith('mix.exs')) return 'elixir';
+  if (lower.endsWith('project.clj') || lower.endsWith('deps.edn')) return 'clojure';
+  if (lower.endsWith('stack.yaml') || lower.endsWith('cabal')) return 'haskell';
+  if (lower.endsWith('dune') || lower.endsWith('opam')) return 'ocaml';
+  if (lower.endsWith('build.sbt')) return 'scala';
+  if (lower.endsWith('build.gradle') || lower.endsWith('build.gradle.kts')) return 'gradle';
+  if (lower.endsWith('pom.xml')) return 'maven';
+  if (lower.endsWith('pubspec.yaml')) return 'dart';
+  if (lower.endsWith('podfile')) return 'ruby';
+  if (lower.endsWith('gemfile')) return 'ruby';
 
   const lastDot = filePath.lastIndexOf('.');
   if (lastDot === -1) return 'unknown';
@@ -363,6 +438,46 @@ const SYMBOL_PATTERNS: Record<string, LanguageConfig['symbolPatterns']> = {
     types: [/(?:resource|data|module|variable|output)\s+"(\w+)"/g],
     constants: [/variable\s+"(\w+)"/g],
     exports: [/output\s+"(\w+)"/g],
+  },
+  crystal: {
+    functions: [/def\s+(\w+[?!=]?)/g],
+    classes: [/class\s+(\w+)/g],
+    interfaces: [/module\s+(\w+)/g],
+    types: [/struct\s+(\w+)/g],
+    constants: [/([A-Z_][A-Z0-9_]+)\s*=/g],
+    exports: [],
+  },
+  coffeescript: {
+    functions: [/(?:(\w+)\s*[:=]\s*)?(?:\([^)]*\)\s*)?[-=]>/g, /(\w+)\s*:\s*[-=]>/g],
+    classes: [/class\s+(\w+)/g],
+    interfaces: [],
+    types: [],
+    constants: [/([A-Z_][A-Z0-9_]+)\s*=/g],
+    exports: [/module\.exports\s*=\s*(\w+)/g],
+  },
+  elm: {
+    functions: [/^(\w+)\s*:/gm],
+    classes: [/^type\s+(?:alias\s+)?(\w+)/gm],
+    interfaces: [],
+    types: [/^type\s+(?:alias\s+)?(\w+)/gm],
+    constants: [],
+    exports: [/^(\w+)\s*exposing/gm],
+  },
+  pascal: {
+    functions: [/procedure\s+(\w+)/g, /function\s+(\w+)/g],
+    classes: [],
+    interfaces: [],
+    types: [/type\s+(\w+)/g],
+    constants: [/const\s+(\w+)/g],
+    exports: [],
+  },
+  vbnet: {
+    functions: [/(?:Public|Private|Protected|Friend)\s+(?:Shared\s+)?(?:Function|Sub)\s+(\w+)/g],
+    classes: [/Public\s+(?:Class|Module)\s+(\w+)/g],
+    interfaces: [/Public\s+Interface\s+(\w+)/g],
+    types: [/Public\s+(?:Structure|Enum)\s+(\w+)/g],
+    constants: [/Public\s+Const\s+(\w+)/g],
+    exports: [],
   },
 };
 

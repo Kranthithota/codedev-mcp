@@ -79,7 +79,10 @@ export function registerDevOpsTools(server: McpServer) {
           };
         });
       } catch (error: unknown) {
-        return { content: [{ type: 'text', text: `iac_analyze failed: ${(error as Error).message}` }], isError: true };
+        return {
+          content: [{ type: 'text', text: `iac_analyze failed: ${(error as Error).message}` }],
+          structuredContent: { platform: 'unknown', resources: [], issues: [], summary: {} },
+        };
       }
     },
   );
@@ -128,7 +131,10 @@ export function registerDevOpsTools(server: McpServer) {
           };
         });
       } catch (error: unknown) {
-        return { content: [{ type: 'text', text: `cicd_analyze failed: ${(error as Error).message}` }], isError: true };
+        return {
+          content: [{ type: 'text', text: `cicd_analyze failed: ${(error as Error).message}` }],
+          structuredContent: { pipelines: [], summary: {} },
+        };
       }
     },
   );
@@ -190,7 +196,7 @@ export function registerDevOpsTools(server: McpServer) {
       } catch (error: unknown) {
         return {
           content: [{ type: 'text', text: `monorepo_analyze failed: ${(error as Error).message}` }],
-          isError: true,
+          structuredContent: { type: 'none', packages: [] },
         };
       }
     },

@@ -44,10 +44,8 @@ export function registerScaffoldTools(server: McpServer) {
             return {
               content: [{ type: 'text', text: lines.join('\n') }],
               structuredContent: {
-                template: 'list',
-                fileName: '',
-                language: result.projectType,
-                generatedCode: JSON.stringify({ projectType: result.projectType, templates: result.templates }, null, 2),
+                action: 'list',
+                data: { projectType: result.projectType, templates: result.templates },
               },
             };
           }
@@ -72,18 +70,27 @@ export function registerScaffoldTools(server: McpServer) {
             return {
               content: [{ type: 'text', text: lines.join('\n') }],
               structuredContent: {
-                template: result.template,
-                fileName: result.fileName,
-                language: result.language,
-                generatedCode: result.generatedCode,
+                action: 'generate',
+                data: {
+                  template: result.template,
+                  fileName: result.fileName,
+                  language: result.language,
+                  generatedCode: result.generatedCode,
+                },
               },
             };
           }
 
-          return { content: [{ type: 'text', text: 'Invalid action' }], isError: true };
+          return {
+            content: [{ type: 'text', text: 'Invalid action' }],
+            structuredContent: { template: 'unknown', fileName: '', language: '', generatedCode: '' },
+          };
         });
       } catch (error: unknown) {
-        return { content: [{ type: 'text', text: `scaffold failed: ${(error as Error).message}` }], isError: true };
+        return {
+          content: [{ type: 'text', text: `scaffold failed: ${(error as Error).message}` }],
+          structuredContent: { template: 'error', fileName: '', language: '', generatedCode: '' },
+        };
       }
     },
   );
