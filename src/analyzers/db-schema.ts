@@ -118,8 +118,9 @@ function parseDrizzleSchema(content: string, file: string): DBTable[] {
   // - mysqlTable('name', { ... })
   // - sqliteTable('name', { ... })
   // - Also matches with or without 'export const'
+  // - Handles both single-line and multi-line table definitions
   const tableMatches = content.matchAll(
-    /(?:export\s+(?:const|default|function)\s+)?(\w+)\s*=\s*(?:pg|mysql|sqlite|drizzle\.)?Table\s*\(\s*['"`](\w+)['"`]\s*,\s*\{([\s\S]*?)\}\s*\)/g,
+    /(?:export\s+(?:const|default|function)\s+)?(\w+)\s*=\s*(?:pg|mysql|sqlite|drizzle\.)?Table\s*\(\s*['"`]([^'"`]+)['"`]\s*,\s*\{([\s\S]*?)\}\s*\)/g,
   );
 
   for (const match of tableMatches) {
@@ -128,39 +129,86 @@ function parseDrizzleSchema(content: string, file: string): DBTable[] {
     const columns: DBColumn[] = [];
 
     // Enhanced column parsing to handle various Drizzle column patterns:
-    // - columnName: varchar('columnName')
-    // - columnName: integer('columnName').primaryKey()
-    // - columnName: text('columnName').notNull()
-    // - columnName: serial('columnName')
-    // - Also handles columns without explicit name parameter
-    const colMatches = body.matchAll(/(\w+)\s*:\s*(\w+)\s*\(\s*['"`]?(\w+)['"`]?\s*\)(?:\s*\.\w+\([^)]*\))*/g);
+    // Pattern 1: columnName: varchar('columnName') or columnName: serial('id')
+    // Pattern 2: columnName: integer('columnName').primaryKey().notNull()
+    // Pattern 3: columnName: text() - without explicit name (uses property name)
+    // Pattern 4: columnName: varchar('columnName', { length: 255 })
+    const colPatterns = [
+      // Standard pattern: name: type('name') or name: type('name').modifiers()
+      /(\w+)\s*:\s*(\w+)\s*\(\s*['"`]([^'"`]+)['"`]\s*(?:,\s*[^)]+)?\)(?:\s*\.\w+\([^)]*\))*/g,
+      // Pattern without explicit name: name: type() - uses property name
+      /(\w+)\s*:\s*(\w+)\s*\(\s*\)(?:\s*\.\w+\([^)]*\))*/g,
+      // Pattern with object config: name: type('name', { ... })
+      /(\w+)\s*:\s*(\w+)\s*\(\s*['"`]([^'"`]+)['"`]\s*,\s*\{[^}]+\}\s*\)(?:\s*\.\w+\([^)]*\))*/g,
+    ];
 
-    for (const col of colMatches) {
-      const columnName = col[3] || col[1]; // Use explicit name or fallback to property name
-      const columnType = col[2];
-      const column: DBColumn = { name: columnName, type: columnType };
+    for (const pattern of colPatterns) {
+      const colMatches = body.matchAll(pattern);
+      for (const col of colMatches) {
+        const propertyName = col[1];
+        const columnType = col[2];
+        const columnName = col[3] || propertyName; // Use explicit name or fallback to property name
+        
+        // Skip if we already have this column (from a previous pattern match)
+        if (columns.some((c) => c.name === columnName)) continue;
 
-      // Find the full column definition to check for modifiers
-      const colStart = body.indexOf(col[0]);
-      const colEnd = body.indexOf(',', colStart);
-      const colEnd2 = body.indexOf('\n', colStart);
-      const fullColumnDef = body.slice(
-        colStart,
-        colEnd !== -1 && (colEnd2 === -1 || colEnd < colEnd2) ? colEnd : colEnd2 !== -1 ? colEnd2 : body.length,
-      );
+        const column: DBColumn = { name: columnName, type: columnType };
 
-      // Check for Drizzle column modifiers
-      if (/\.primaryKey\(\)/.test(fullColumnDef)) column.primary = true;
-      if (/\.notNull\(\)/.test(fullColumnDef)) column.nullable = false;
-      if (/\.unique\(\)/.test(fullColumnDef)) column.unique = true;
+        // Find the full column definition to check for modifiers
+        // Look for the complete column definition including method chains
+        const colStart = body.indexOf(col[0]);
+        let colEnd = body.indexOf(',', colStart);
+        const colEnd2 = body.indexOf('\n', colStart);
+        const colEnd3 = body.indexOf('}', colStart);
+        
+        // Find the actual end of the column definition
+        let actualEnd = body.length;
+        if (colEnd !== -1 && (colEnd2 === -1 || colEnd < colEnd2)) actualEnd = Math.min(actualEnd, colEnd);
+        if (colEnd2 !== -1) actualEnd = Math.min(actualEnd, colEnd2);
+        if (colEnd3 !== -1) actualEnd = Math.min(actualEnd, colEnd3);
+        
+        const fullColumnDef = body.slice(colStart, actualEnd);
 
-      // Check for references
-      const refMatch = fullColumnDef.match(/\.references\s*\(\s*\(\)\s*=>\s*(\w+)\.(\w+)/);
-      if (refMatch) {
-        column.references = refMatch[2]; // Reference to another table's column
+        // Check for Drizzle column modifiers
+        if (/\.primaryKey\(\)/.test(fullColumnDef)) column.primary = true;
+        if (/\.notNull\(\)/.test(fullColumnDef)) column.nullable = false;
+        if (/\.unique\(\)/.test(fullColumnDef)) column.unique = true;
+        if (/\.default\(/.test(fullColumnDef)) {
+          const defaultMatch = fullColumnDef.match(/\.default\(([^)]+)\)/);
+          if (defaultMatch) column.default = defaultMatch[1];
+        }
+
+        // Check for references - handle both arrow function and direct reference patterns
+        const refPatterns = [
+          /\.references\s*\(\s*\(\)\s*=>\s*(\w+)\.(\w+)/,
+          /\.references\s*\(\s*\(\)\s*=>\s*(\w+)\s*\(\s*\)\.(\w+)/,
+          /\.references\s*\(\s*(\w+)\.(\w+)/,
+        ];
+        
+        for (const refPattern of refPatterns) {
+          const refMatch = fullColumnDef.match(refPattern);
+          if (refMatch) {
+            column.references = refMatch[2] || refMatch[1]; // Reference to another table's column
+            break;
+          }
+        }
+
+        columns.push(column);
       }
+    }
 
-      columns.push(column);
+    // Also try a simpler pattern for columns that might not match the above
+    // This catches columns defined with minimal syntax
+    if (columns.length === 0) {
+      const simpleColPattern = /(\w+)\s*:\s*(\w+)\s*\(/g;
+      const simpleMatches = body.matchAll(simpleColPattern);
+      for (const col of simpleMatches) {
+        const columnName = col[1];
+        const columnType = col[2];
+        if (!columns.some((c) => c.name === columnName)) {
+          columns.push({ name: columnName, type: columnType });
+        }
+      }
     }
 
     if (columns.length > 0 || tableName) {

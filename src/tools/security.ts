@@ -68,6 +68,14 @@ export function registerSecurityTools(server: McpServer) {
             .join('\n');
         }
 
+        // Ensure all severity fields are present with defaults
+        const severity = {
+          critical: report.bySeverity.critical || 0,
+          high: report.bySeverity.high || 0,
+          medium: report.bySeverity.medium || 0,
+          low: report.bySeverity.low || 0,
+        };
+
         return {
           content: [{ type: 'text', text: output }],
           structuredContent: {
@@ -80,7 +88,7 @@ export function registerSecurityTools(server: McpServer) {
               recommendation: f.recommendation,
             })),
             total: report.totalFindings,
-            severity: report.bySeverity,
+            severity,
           },
         };
       } catch (error: unknown) {
