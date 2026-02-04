@@ -1,6 +1,6 @@
 {
   "name": "codedev-mcp",
-  "version": "3.2.2",
+  "version": "3.2.3",
   "description": "Universal code development MCP server — search, analyze, navigate, review any codebase. 29 tools, semantic search, AST parsing, security scanning, dead code detection, complexity heatmaps, DB schema parsing, API discovery, IaC analysis, CI/CD parsing, monorepo support. Zero API keys.",
   "type": "module",
   "main": "dist/index.js",
