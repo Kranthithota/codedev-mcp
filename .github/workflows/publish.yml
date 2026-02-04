@@ -6,6 +6,9 @@ on:
   push:
     tags:
       - 'v*'
+    branches:
+      - main
+  workflow_dispatch:
 
 jobs:
   publish:
@@ -15,12 +18,44 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch full history to detect version changes
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org/
-      - run: npm ci
-      - run: npm run build
-      - run: npm publish --access public --provenance
+      - name: Check if version changed
+        id: version_check
+        run: |
+          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" != "refs/heads/main" ]; then
+            # For tag pushes, always publish
+            echo "should_publish=true" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            # For main branch pushes, check if package.json version changed
+            git diff HEAD~1 HEAD -- package.json > /dev/null 2>&1
+            if [ $? -eq 0 ]; then
+              OLD_VERSION=$(git show HEAD~1:package.json 2>/dev/null | grep -o '"version": "[^"]*"' | cut -d'"' -f4 || echo "")
+              NEW_VERSION=$(grep -o '"version": "[^"]*"' package.json | cut -d'"' -f4)
+              if [ "$OLD_VERSION" != "$NEW_VERSION" ] && [ -n "$NEW_VERSION" ]; then
+                echo "should_publish=true" >> $GITHUB_OUTPUT
+                echo "Version changed from $OLD_VERSION to $NEW_VERSION"
+              else
+                echo "should_publish=false" >> $GITHUB_OUTPUT
+                echo "No version change detected"
+              fi
+            else
+              echo "should_publish=false" >> $GITHUB_OUTPUT
+              echo "package.json not modified"
+            fi
+          else
+            # For releases or manual dispatch, always publish
+            echo "should_publish=true" >> $GITHUB_OUTPUT
+          fi
+      - name: Publish to npm
+        if: steps.version_check.outputs.should_publish == 'true'
+        run: |
+          npm ci
+          npm run build
+          npm publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
