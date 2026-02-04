@@ -31,9 +31,11 @@ export function registerQualityTools(server: McpServer) {
     async (params) => {
       try {
         const searchCwd = params.directory ? safePath(params.directory) : CWD;
+        // Only match TODO comments, not function calls like logger.warn()
+        // Match TODO/FIXME/HACK/XXX/BUG/OPTIMIZE that appear in comments (// or /* */)
         const results = await searchCode({
           cwd: searchCwd,
-          pattern: '(TODO|FIXME|HACK|XXX|WARN|BUG|OPTIMIZE)\\b',
+          pattern: '(//|/\\*|#|<!--).*?(TODO|FIXME|HACK|XXX|BUG|OPTIMIZE)\\b',
           isRegex: true,
           fileGlob: params.file_glob,
           maxResults: 100,
@@ -159,46 +161,93 @@ export function registerQualityTools(server: McpServer) {
     async (params) => {
       try {
         const searchCwd = params.directory ? safePath(params.directory) : CWD;
-        // Use simpler patterns that work with grep - search for common empty catch patterns
-        // Pattern 1: catch() { } or catch(e) { }
-        const catchPattern1 = 'catch[[:space:]]*([^)]*)[[:space:]]*\\{[[:space:]]*\\}';
-        // Pattern 2: except: pass (Python)
-        const exceptPattern = 'except:[[:space:]]*pass';
-        // Pattern 3: rescue => nil (Ruby)
-        const rescuePattern = 'rescue[[:space:]]*=>[[:space:]]*nil';
+        const fileGlob = params.file_glob || '**/*.{ts,tsx,js,jsx,py,rb}';
+        const files = await listFiles(searchCwd, { glob: fileGlob });
+        const matches: Array<{ file: string; line: number; match: string }> = [];
 
-        const catchResults = await searchCode({
-          cwd: searchCwd,
-          pattern: catchPattern1,
-          isRegex: true,
-          fileGlob: params.file_glob,
-          maxResults: 50,
-          contextLines: 1,
-        });
+        // Process files to find empty catch blocks
+        for (const file of files.slice(0, 500)) {
+          try {
+            const filePath = path.join(searchCwd, file);
+            const content = await readFile(filePath, 'utf-8');
+            const language = detectLanguage(file);
 
-        const exceptResults = await searchCode({
-          cwd: searchCwd,
-          pattern: exceptPattern,
-          isRegex: true,
-          fileGlob: params.file_glob,
-          maxResults: 50,
-          contextLines: 1,
-        });
+            if (language === 'python') {
+              // Python: except: pass or except Exception: pass
+              const exceptRegex = /except\s*(?:\([^)]+\))?\s*:\s*pass/g;
+              let match;
+              while ((match = exceptRegex.exec(content)) !== null) {
+                const lineNum = content.substring(0, match.index).split('\n').length;
+                matches.push({
+                  file,
+                  line: lineNum,
+                  match: 'Empty except: pass',
+                });
+              }
+            } else if (language === 'ruby') {
+              // Ruby: rescue => nil or rescue; end
+              const rescueRegex = /rescue\s*(?:=>\s*nil|;?\s*end)/g;
+              let match;
+              while ((match = rescueRegex.exec(content)) !== null) {
+                const lineNum = content.substring(0, match.index).split('\n').length;
+                matches.push({
+                  file,
+                  line: lineNum,
+                  match: 'Empty rescue block',
+                });
+              }
+            } else {
+              // JavaScript/TypeScript: catch() { } or catch(e) { }
+              // Find all catch blocks
+              const catchRegex = /catch\s*\([^)]*\)\s*\{/g;
+              let catchMatch;
+              while ((catchMatch = catchRegex.exec(content)) !== null) {
+                const catchStart = catchMatch.index;
+                const catchLine = content.substring(0, catchStart).split('\n').length;
+                const afterCatch = content.substring(catchStart + catchMatch[0].length);
+                
+                // Find the matching closing brace
+                let braceCount = 1;
+                let pos = 0;
+                let foundEnd = false;
+                
+                while (pos < afterCatch.length && braceCount > 0) {
+                  if (afterCatch[pos] === '{') braceCount++;
+                  else if (afterCatch[pos] === '}') {
+                    braceCount--;
+                    if (braceCount === 0) {
+                      foundEnd = true;
+                      break;
+                    }
+                  }
+                  pos++;
+                }
+                
+                if (foundEnd) {
+                  const catchBody = afterCatch.substring(0, pos);
+                  // Check if body is empty (only whitespace/comments)
+                  const trimmedBody = catchBody.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '').trim();
+                  if (trimmedBody === '') {
+                    matches.push({
+                      file,
+                      line: catchLine,
+                      match: 'Empty catch block',
+                    });
+                  }
+                }
+              }
+            }
+          } catch {
+            continue;
+          }
+        }
 
-        const rescueResults = await searchCode({
-          cwd: searchCwd,
-          pattern: rescuePattern,
-          isRegex: true,
-          fileGlob: params.file_glob,
-          maxResults: 50,
-          contextLines: 1,
-        });
-
-        // Combine and deduplicate results
-        const allResults = [...catchResults, ...exceptResults, ...rescueResults];
-        const results = allResults.filter(
-          (r, i, arr) => arr.findIndex((other) => other.file === r.file && other.line === r.line) === i,
-        );
+        const results = matches.map((m) => ({
+          file: m.file,
+          line: m.line,
+          text: m.match,
+          column: 0,
+        }));
         const output = results.map((r) => `${r.file}:${r.line} │ ${r.text.trim()}`).join('\n');
         return {
           content: [{ type: 'text', text: `Found ${results.length} empty/swallowed error handlers:\n\n${output}` }],
@@ -241,57 +290,84 @@ export function registerQualityTools(server: McpServer) {
         const files = await listFiles(searchCwd, { glob: fileGlob });
         const matches: Array<{ file: string; line: number; match: string }> = [];
         
-        for (const file of files.slice(0, 200)) {
+        for (const file of files.slice(0, 500)) {
           try {
             const filePath = path.join(searchCwd, file);
             const language = detectLanguage(file);
+            const content = await readFile(filePath, 'utf-8');
+            const lines = content.split('\n');
             
             // Try AST parsing first
             const astSymbols = await parseAST(filePath, language);
-            if (astSymbols) {
+            if (astSymbols && astSymbols.length > 0) {
               for (const symbol of astSymbols) {
-                if ((symbol.type === 'function' || symbol.type === 'method') && symbol.endLine && symbol.startLine) {
+                if (symbol.type === 'function' && symbol.endLine && symbol.startLine) {
                   const lineCount = symbol.endLine - symbol.startLine + 1;
                   if (lineCount > threshold) {
                     matches.push({
                       file,
                       line: symbol.startLine,
-                      match: `${symbol.name}() - ${lineCount} lines`,
+                      match: `${symbol.name || 'anonymous'}() - ${lineCount} lines`,
                     });
                   }
                 }
               }
-            } else {
-              // Fallback to regex-based extraction
-              const symbols = await extractSymbols(filePath);
-              const content = await readFile(filePath, 'utf-8');
-              const lines = content.split('\n');
+            }
+            
+            // Always also try regex-based extraction as fallback/complement
+            const symbols = await extractSymbols(filePath);
+            const processedFunctions = new Set<string>();
+            
+            for (const symbol of symbols.filter((s) => s.kind === 'function')) {
+              const key = `${file}:${symbol.line}`;
+              if (processedFunctions.has(key)) continue;
+              processedFunctions.add(key);
               
-              for (const symbol of symbols.filter((s) => s.kind === 'function')) {
-                // Find function end by looking for closing brace
-                let braceCount = 0;
-                let inFunction = false;
-                let startLine = symbol.line;
-                let endLine = startLine;
+              // Find function start and end by parsing braces
+              let braceCount = 0;
+              let startLine = symbol.line;
+              let endLine = startLine;
+              let foundStart = false;
+              
+              // Look backwards to find function start
+              for (let i = symbol.line - 1; i >= 0 && i >= symbol.line - 10; i--) {
+                const line = lines[i];
+                if (/^\s*(?:export\s+)?(?:async\s+)?function\s+\w+|^\s*(?:export\s+)?(?:async\s+)?\w+\s*[:=]\s*(?:async\s*)?\(|^\s*(?:export\s+)?(?:async\s+)?\w+\s*[:=]\s*(?:async\s*)?\w+\s*=>/.test(line)) {
+                  startLine = i + 1;
+                  foundStart = true;
+                  break;
+                }
+              }
+              
+              if (!foundStart) startLine = symbol.line;
+              
+              // Find function end by counting braces
+              for (let i = startLine - 1; i < lines.length; i++) {
+                const line = lines[i];
+                const openBraces = (line.match(/\{/g) || []).length;
+                const closeBraces = (line.match(/\}/g) || []).length;
                 
-                for (let i = symbol.line - 1; i < lines.length; i++) {
-                  const line = lines[i];
-                  if (!inFunction && /function\s+\w+|=>\s*\{|^\s*\w+\s*\([^)]*\)\s*\{/.test(line)) {
-                    inFunction = true;
-                    startLine = i + 1;
-                  }
-                  if (inFunction) {
-                    braceCount += (line.match(/\{/g) || []).length;
-                    braceCount -= (line.match(/\}/g) || []).length;
-                    if (braceCount === 0 && inFunction) {
-                      endLine = i + 1;
-                      break;
-                    }
+                if (i === startLine - 1 || braceCount > 0) {
+                  braceCount += openBraces;
+                  braceCount -= closeBraces;
+                  
+                  if (braceCount === 0 && i >= startLine) {
+                    endLine = i + 1;
+                    break;
                   }
                 }
-                
-                const lineCount = endLine - startLine + 1;
-                if (lineCount > threshold) {
+              }
+              
+              // If we didn't find the end, estimate from remaining content
+              if (endLine === startLine && startLine < lines.length) {
+                endLine = lines.length;
+              }
+              
+              const lineCount = endLine - startLine + 1;
+              if (lineCount > threshold) {
+                // Check if we already added this from AST
+                const alreadyAdded = matches.some((m) => m.file === file && Math.abs(m.line - startLine) <= 2);
+                if (!alreadyAdded) {
                   matches.push({
                     file,
                     line: startLine,
@@ -300,8 +376,8 @@ export function registerQualityTools(server: McpServer) {
                 }
               }
             }
-          } catch {
-            // Skip files that can't be parsed
+          } catch (error) {
+            // Skip files that can't be parsed, but log for debugging
             continue;
           }
         }
@@ -348,9 +424,14 @@ export function registerQualityTools(server: McpServer) {
         const files = await listFiles(searchCwd, { glob: fileGlob });
         const matches: Array<{ file: string; line: number; match: string }> = [];
         
-        for (const file of files.slice(0, 500)) {
+        // Process more files and ensure we're scanning the right directory
+        for (const file of files.slice(0, 1000)) {
           try {
             const filePath = path.join(searchCwd, file);
+            // Verify file exists and is readable
+            const stats = await import('node:fs/promises').then((fs) => fs.stat(filePath));
+            if (!stats.isFile()) continue;
+            
             const content = await readFile(filePath, 'utf-8');
             const lineCount = content.split('\n').length;
             
