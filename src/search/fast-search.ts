@@ -361,13 +361,37 @@ export async function listFiles(cwd: string, options?: ListOptions): Promise<str
     }
     findArgs.push('-print');
 
-    const { stdout } = await execFileAsync('find', findArgs, { cwd, maxBuffer: 20 * 1024 * 1024, timeout: 15000 });
+    const { stdout } = await execFileAsync('find', findArgs, {
+      cwd,
+      maxBuffer: 20 * 1024 * 1024,
+      timeout: 15000,
+    });
     return stdout
       .split('\n')
       .filter(Boolean)
       .map((f) => f.replace(/^\.\//, ''));
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
+    // Handle permission errors gracefully - find may write to stderr but still succeed
+    // In CI environments, find can encounter permission denied errors for system directories
+    const err = error as { stdout?: string; stderr?: string; code?: number; message?: string };
+    // If we have stdout despite errors, use it (find can succeed with permission warnings)
+    if (err.stdout) {
+      return err.stdout
+        .split('\n')
+        .filter(Boolean)
+        .map((f) => f.replace(/^\.\//, ''));
+    }
+    // If it's just permission errors, return empty array (common in CI environments)
+    const stderr = err.stderr || '';
+    const message = err instanceof Error ? err.message : err.message || String(err);
+    if (
+      stderr.includes('Permission denied') ||
+      stderr.includes('permission') ||
+      message.includes('Permission denied') ||
+      message.includes('permission')
+    ) {
+      return [];
+    }
     throw new Error(`File listing failed: ${message}`);
   }
 }
