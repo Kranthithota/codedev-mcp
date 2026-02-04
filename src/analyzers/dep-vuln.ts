@@ -226,11 +226,41 @@ async function runNpmAudit(cwd: string): Promise<VulnDependency[] | null> {
     await readFile(packageJsonPath, 'utf-8');
 
     // Run npm audit --json
-    const { stdout } = await execFileAsync('npm', ['audit', '--json'], {
-      cwd,
-      timeout: 30000, // 30 second timeout
-      maxBuffer: 10 * 1024 * 1024, // 10MB buffer
-    });
+    // Note: npm audit exits with code 1 when vulnerabilities are found, which is normal
+    let stdout = '';
+    try {
+      const result = await execFileAsync('npm', ['audit', '--json'], {
+        cwd,
+        timeout: 30000, // 30 second timeout
+        maxBuffer: 10 * 1024 * 1024, // 10MB buffer
+      });
+      stdout = result.stdout as string;
+    } catch (error: unknown) {
+      // npm audit exits with code 1 when vulnerabilities are found - this is expected
+      // Check if stderr contains the JSON output (npm writes to stderr on error)
+      const execError = error as { stdout?: string; stderr?: string; code?: number };
+      if (execError.code === 1 && execError.stderr) {
+        // Try to parse stderr as JSON (npm audit sometimes writes JSON to stderr)
+        try {
+          const stderrJson = JSON.parse(execError.stderr);
+          if (stderrJson.vulnerabilities) {
+            stdout = execError.stderr;
+          }
+        } catch {
+          // If stderr isn't JSON, try stdout
+          if (execError.stdout) {
+            stdout = execError.stdout;
+          }
+        }
+      } else if (execError.stdout) {
+        stdout = execError.stdout;
+      } else {
+        // Real error (npm not found, network issue, etc.)
+        return null;
+      }
+    }
+
+    if (!stdout) return null;
 
     const auditData = JSON.parse(stdout);
     const vulns: VulnDependency[] = [];
