@@ -205,7 +205,8 @@ Add to `~/.gemini/settings.json`:
 > **Note**: If Gemini CLI can't find `npx`, use the full path: `"command": "/usr/local/bin/npx"` (run `which npx` to find yours). On Windows, use `npx.cmd` or the full path from `where npx`.
 
 ### Cursor
-Add to `~/.cursor/mcp.json`:
+
+**Recommended**: Add to `~/.cursor/mcp.json` (global) or `.cursor/mcp.json` (project-specific):
 ```json
 {
   "mcpServers": {
@@ -216,6 +217,21 @@ Add to `~/.cursor/mcp.json`:
   }
 }
 ```
+
+**Alternative** (if installed locally via `npm install codedev-mcp`):
+```json
+{
+  "mcpServers": {
+    "codedev": {
+      "command": "node",
+      "args": ["./node_modules/codedev-mcp/dist/index.js"],
+      "cwd": "${workspaceFolder}"
+    }
+  }
+}
+```
+
+> **Note**: Using `npx` is recommended because it works whether the package is installed locally or globally, and automatically resolves the correct path.
 
 ### VS Code / GitHub Copilot
 Command Palette → "MCP: Add Server", or add to `.vscode/settings.json`:
