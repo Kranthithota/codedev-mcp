@@ -120,8 +120,10 @@ function parseDrizzleSchema(content: string, file: string): DBTable[] {
   // - Also matches with or without 'export const'
   // - Handles both single-line and multi-line table definitions
   // - Supports callback style: pgTable('name', (t) => ({ ... }))
+  // - Supports: export const table = pgTable(...) or const table = pgTable(...)
+  // - More flexible whitespace handling
   const tableMatches = content.matchAll(
-    /(?:export\s+(?:const|default|function)\s+)?(\w+)\s*=\s*(?:pg|mysql|sqlite)Table\s*\(\s*['"`]([^'"`]+)['"`]\s*,\s*(?:\{([\s\S]*?)\}|\([^)]*\)\s*=>\s*\{([\s\S]*?)\})\s*\)/g,
+    /(?:export\s+(?:const|default|function|async\s+function)\s+)?(\w+)\s*=\s*(?:pg|mysql|sqlite)Table\s*\(\s*['"`]([^'"`]+)['"`]\s*,\s*(?:\{([\s\S]*?)\}|\([^)]*\)\s*=>\s*\{([\s\S]*?)\}|\([^)]*\)\s*=>\s*\(([\s\S]*?)\))\s*\)/g,
   );
 
   for (const match of tableMatches) {
@@ -291,11 +293,14 @@ export async function analyzeDBSchema(cwd: string, options?: { directory?: strin
     '**/schema.{ts,js,tsx,jsx}',
     '**/schema/**/*.{ts,js,tsx,jsx}',
     '**/db/**/*.{ts,js,tsx,jsx}',
+    '**/db/schema/**/*.{ts,js,tsx,jsx}',
+    '**/src/db/**/*.{ts,js,tsx,jsx}',
+    '**/src/db/schema/**/*.{ts,js,tsx,jsx}',
     '**/drizzle/**/*.{ts,js,tsx,jsx}',
     '**/*schema*.{ts,js,tsx,jsx}',
     '**/*table*.{ts,js,tsx,jsx}',
     '**/lib/db/**/*.{ts,js,tsx,jsx}',
-    '**/src/db/**/*.{ts,js,tsx,jsx}',
+    '**/models/**/*.{ts,js,tsx,jsx}',
   ];
   const drizzleFileSet = new Set<string>();
   for (const glob of drizzleGlobs) {
@@ -324,7 +329,12 @@ export async function analyzeDBSchema(cwd: string, options?: { directory?: strin
     try {
       const content = await readFile(path.resolve(dir, file), 'utf-8');
       // Enhanced detection: check for various Drizzle patterns
-      if (/pgTable|mysqlTable|sqliteTable|drizzle\.table|from\s+['"]drizzle-orm|import.*drizzle-orm/.test(content)) {
+      // Also check for table definitions even if import is not present (might be re-exported)
+      if (
+        /(?:pg|mysql|sqlite)Table\s*\(|drizzle\.table|from\s+['"]drizzle-orm|import.*drizzle-orm|require\(['"]drizzle-orm/.test(
+          content,
+        )
+      ) {
         const tables = parseDrizzleSchema(content, file);
         allTables.push(...tables);
         if (tables.length > 0) orms.add('drizzle');

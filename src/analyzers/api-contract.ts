@@ -182,8 +182,12 @@ function parseExpressRoutes(content: string, file: string): ApiEndpoint[] {
 
   // Pattern 1: Standard router.get/post/put/delete/patch('/path', ...)
   // Matches: router.get('/api/users', handler) or app.post('/api/users', handler)
+  // Also matches: router.get("/api/users", handler) with double quotes
+  // Also matches: router.get(`/api/users`, handler) with template literals
+  // Also matches: const router = express.Router(); router.get(...)
+  // Also matches: routes exported as arrays/objects
   const standardRouteRegex =
-    /(?:app|router|express\.Router\(\)|express\(\))\.(get|post|put|delete|patch|all|use)\s*\(\s*['"`]([^'"`]+)['"`]/gi;
+    /(?:app|router|express\.Router\(\)|express\(\)|(?:const|let|var)\s+\w+\s*=\s*express\.Router\(\))\s*\.(get|post|put|delete|patch|all|use)\s*\(\s*['"`]([^'"`]+)['"`]/gi;
   let match;
 
   while ((match = standardRouteRegex.exec(content)) !== null) {
@@ -258,7 +262,30 @@ function parseExpressRoutes(content: string, file: string): ApiEndpoint[] {
     });
   }
 
-  // Pattern 6: Express Router instances: const router = express.Router(); router.get(...)
+  // Pattern 6: Routes exported as arrays or objects
+  // Matches: export default [{ method: 'GET', path: '/api/users', handler }]
+  // Matches: export const routes = [{ method: 'GET', path: '/api/users' }]
+  const exportedRoutesRegex = /export\s+(?:default\s+)?(?:const|let|var)?\s*\w*\s*=\s*\[([\s\S]*?)\]/g;
+  let exportedMatch;
+  while ((exportedMatch = exportedRoutesRegex.exec(content)) !== null) {
+    const routesArray = exportedMatch[1];
+    // Try to extract route objects from the array
+    const routeObjRegex = /\{\s*(?:method|path|route|url)\s*:\s*['"`]([^'"`]+)['"`]\s*,\s*(?:method|path|route|url)\s*:\s*['"`]([^'"`]+)['"`]/gi;
+    let routeObjMatch;
+    while ((routeObjMatch = routeObjRegex.exec(routesArray)) !== null) {
+      const line = content.substring(0, exportedMatch.index).split('\n').length;
+      // Determine which is method and which is path
+      const first = routeObjMatch[1];
+      const second = routeObjMatch[2];
+      const method = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'].includes(first.toUpperCase()) ? first.toUpperCase() : second.toUpperCase();
+      const path = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'].includes(first.toUpperCase()) ? second : first;
+      if (method && path && path.startsWith('/')) {
+        endpoints.push({ method, path, file, line, source: 'express' });
+      }
+    }
+  }
+
+  // Pattern 7: Express Router instances: const router = express.Router(); router.get(...)
   // This is already covered by Pattern 1, but let's also check for mounted routers
   const mountedRouterRegex = /(?:app|router)\.use\s*\(\s*['"`]([^'"`]+)['"`]\s*,\s*(\w+Router|\w+Routes)/gi;
   while ((match = mountedRouterRegex.exec(content)) !== null) {
