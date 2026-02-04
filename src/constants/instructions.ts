@@ -1,4 +1,4 @@
-export const SERVER_INSTRUCTIONS = `codedev-mcp provides comprehensive, read-only access to the local codebase with 42 tools across 11 categories.
+export const SERVER_INSTRUCTIONS = `codedev-mcp provides comprehensive, read-only access to the local codebase with 48 tools across 11 categories.
 
 ## Tool Categories
 
@@ -8,13 +8,19 @@ export const SERVER_INSTRUCTIONS = `codedev-mcp provides comprehensive, read-onl
 - **find_references** — Trace symbol usage
 - **semantic_search** — Concept-based search ("authentication logic")
 
-### Analysis (6 tools)
+### Analysis (12 tools)
 - **codebase_map** — Project structure, languages, frameworks
 - **analyze_file** — Detailed file analysis with imports
 - **dependency_graph** — Import relationships and dependencies
 - **call_graph** — Who-calls-what analysis
 - **code_metrics** — Complexity, function lengths
 - **test_coverage** — What's tested
+- **complexity_heatmap** — Rank files/functions by cyclomatic/cognitive complexity (A–F grades)
+- **type_flow** — Trace where a type is defined, imported, and used across the codebase
+- **context_pack** — Smart context window packing for LLMs (relevance-scored, token-budgeted)
+- **code_ownership** — Git blame-based file ownership, bus factor analysis
+- **import_cycles** — Detect circular import chains (A→B→C→A)
+- **tech_debt_score** — Aggregate technical debt score (0–100) combining complexity, secrets, TODOs, etc.
 
 ### Navigation (2 tools)
 - **read_files** — Read files (single or batch)
@@ -65,10 +71,13 @@ export const SERVER_INSTRUCTIONS = `codedev-mcp provides comprehensive, read-onl
 
 ## Recommended Workflow
 1. Start with **codebase_map** to understand the project
-2. Use **search_code** or **semantic_search** to find relevant code
-3. Use **read_files** to inspect contents
-4. Use **git_log**/**git_blame** for history context
-5. Use **find_todos**/**find_secrets** for code quality
+2. Run **tech_debt_score** for an instant health check
+3. Use **search_code** or **semantic_search** to find relevant code
+4. Use **type_flow** to understand how types propagate
+5. Use **complexity_heatmap** to find risky hotspots
+6. Use **code_ownership** before code reviews to identify reviewers
+7. Use **import_cycles** to catch circular dependencies
+8. Use **context_pack** to minimize token waste when gathering context
 
 ## Resources
 - project://config, project://structure, project://gitinfo
