@@ -27,29 +27,29 @@ jobs:
       - name: Check if version changed
         id: version_check
         run: |
-          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" != "refs/heads/main" ]; then
-            # For tag pushes, always publish
+          # For tag pushes (v*), releases, or manual dispatch, always publish
+          if [[ "${{ github.event_name }}" == "release" ]] || [[ "${{ github.event_name }}" == "workflow_dispatch" ]] || [[ "${{ github.ref }}" == refs/tags/v* ]]; then
             echo "should_publish=true" >> $GITHUB_OUTPUT
-          elif [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            echo "Publishing: ${{ github.event_name }} event"
+          elif [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
             # For main branch pushes, check if package.json version changed
-            git diff HEAD~1 HEAD -- package.json > /dev/null 2>&1
-            if [ $? -eq 0 ]; then
+            if git diff HEAD~1 HEAD -- package.json > /dev/null 2>&1; then
               OLD_VERSION=$(git show HEAD~1:package.json 2>/dev/null | grep -o '"version": "[^"]*"' | cut -d'"' -f4 || echo "")
               NEW_VERSION=$(grep -o '"version": "[^"]*"' package.json | cut -d'"' -f4)
               if [ "$OLD_VERSION" != "$NEW_VERSION" ] && [ -n "$NEW_VERSION" ]; then
                 echo "should_publish=true" >> $GITHUB_OUTPUT
-                echo "Version changed from $OLD_VERSION to $NEW_VERSION"
+                echo "Version changed from $OLD_VERSION to $NEW_VERSION - publishing"
               else
                 echo "should_publish=false" >> $GITHUB_OUTPUT
-                echo "No version change detected"
+                echo "No version change detected (old: $OLD_VERSION, new: $NEW_VERSION)"
               fi
             else
               echo "should_publish=false" >> $GITHUB_OUTPUT
-              echo "package.json not modified"
+              echo "package.json not modified in this commit"
             fi
           else
-            # For releases or manual dispatch, always publish
-            echo "should_publish=true" >> $GITHUB_OUTPUT
+            echo "should_publish=false" >> $GITHUB_OUTPUT
+            echo "Not a publish trigger event"
           fi
       - name: Publish to npm
         if: steps.version_check.outputs.should_publish == 'true'
