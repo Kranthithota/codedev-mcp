@@ -290,7 +290,8 @@ export function registerQualityTools(server: McpServer) {
         const files = await listFiles(searchCwd, { glob: fileGlob });
         const matches: Array<{ file: string; line: number; match: string }> = [];
         
-        for (const file of files.slice(0, 500)) {
+        // Increased limit from 500 to 2000 to handle large projects (949+ files)
+        for (const file of files.slice(0, 2000)) {
           try {
             const filePath = path.join(searchCwd, file);
             const language = detectLanguage(file);
@@ -425,7 +426,8 @@ export function registerQualityTools(server: McpServer) {
         const matches: Array<{ file: string; line: number; match: string }> = [];
         
         // Process more files and ensure we're scanning the right directory
-        for (const file of files.slice(0, 1000)) {
+        // Increased limit from 1000 to 2000 to handle large projects (949+ files)
+        for (const file of files.slice(0, 2000)) {
           try {
             const filePath = path.join(searchCwd, file);
             // Verify file exists and is readable
@@ -521,7 +523,8 @@ export function registerQualityTools(server: McpServer) {
         const matches: Array<{ file: string; line: number; match: string }> = [];
         
         // Extract function bodies and look for duplicates
-        for (const file of files.slice(0, 100)) {
+        // Increased limit from 100 to 2000 to handle large projects
+        for (const file of files.slice(0, 2000)) {
           try {
             const filePath = path.join(searchCwd, file);
             const language = detectLanguage(file);
@@ -548,6 +551,32 @@ export function registerQualityTools(server: McpServer) {
                     }
                   }
                 }
+              }
+            }
+            
+            // Also detect structural patterns (e.g., CRUD patterns)
+            // Look for common patterns like: getXById, createX, updateX, deleteX
+            // These patterns appear across multiple files with similar structure
+            const structuralPatterns = [
+              {
+                pattern: /(?:export\s+)?(?:const|async\s+function|function)\s+get\w+ById\s*=\s*async\s*\([^)]*id[^)]*\)\s*=>[\s\S]{0,500}?return\s+await\s+db\.query\.\w+\.findFirst/,
+                name: 'getXById pattern',
+              },
+              {
+                pattern: /return\s+await\s+db\.query\.\w+\.findFirst\s*\(\s*\{[\s\S]{0,200}?where:\s*\([^)]*\)\s*=>\s*eq\([^)]*\)[\s\S]{0,200}?\}\)/,
+                name: 'db.query.findFirst with eq pattern',
+              },
+            ];
+            
+            for (const { pattern, name } of structuralPatterns) {
+              const patternMatches = content.matchAll(pattern);
+              for (const match of patternMatches) {
+                const line = content.substring(0, match.index).split('\n').length;
+                const key = `structural:${name}`;
+                if (!codeBlocks.has(key)) {
+                  codeBlocks.set(key, []);
+                }
+                codeBlocks.get(key)!.push({ file, line });
               }
             }
           } catch {
@@ -613,7 +642,8 @@ export function registerQualityTools(server: McpServer) {
         // Collect all exported symbols
         const exportedSymbols: Array<{ file: string; name: string; line: number; kind: string }> = [];
         
-        for (const file of files.slice(0, 200)) {
+        // Increased limit from 200 to 2000 to handle large projects
+        for (const file of files.slice(0, 2000)) {
           try {
             const filePath = path.join(searchCwd, file);
             const symbols = await extractSymbols(filePath);
@@ -635,7 +665,8 @@ export function registerQualityTools(server: McpServer) {
         }
         
         // Check references for each exported symbol
-        for (const symbol of exportedSymbols.slice(0, 100)) {
+        // Increased limit from 100 to 1000 to handle large projects
+        for (const symbol of exportedSymbols.slice(0, 1000)) {
           try {
             // Search for references to this symbol
             const references = await searchCode({

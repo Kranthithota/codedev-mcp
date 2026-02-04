@@ -289,13 +289,28 @@ export async function analyzeDBSchema(cwd: string, options?: { directory?: strin
   }
 
   // Search for Drizzle schema files in common locations
+  // Support both schema.ts and *.schema.ts naming conventions
   const drizzleGlobs = [
     '**/schema.{ts,js,tsx,jsx}',
     '**/schema/**/*.{ts,js,tsx,jsx}',
+    '**/schema/**/*.schema.{ts,js,tsx,jsx}',
+    '**/schema2/**/*.{ts,js,tsx,jsx}',
+    '**/schema2/**/*.schema.{ts,js,tsx,jsx}',
     '**/db/**/*.{ts,js,tsx,jsx}',
     '**/db/schema/**/*.{ts,js,tsx,jsx}',
+    '**/db/schema/**/*.schema.{ts,js,tsx,jsx}',
+    '**/db/schema2/**/*.{ts,js,tsx,jsx}',
+    '**/db/schema2/**/*.schema.{ts,js,tsx,jsx}',
     '**/src/db/**/*.{ts,js,tsx,jsx}',
     '**/src/db/schema/**/*.{ts,js,tsx,jsx}',
+    '**/src/db/schema/**/*.schema.{ts,js,tsx,jsx}',
+    '**/src/db/schema2/**/*.{ts,js,tsx,jsx}',
+    '**/src/db/schema2/**/*.schema.{ts,js,tsx,jsx}',
+    '**/v2/db/**/*.{ts,js,tsx,jsx}',
+    '**/v2/db/schema/**/*.{ts,js,tsx,jsx}',
+    '**/v2/db/schema/**/*.schema.{ts,js,tsx,jsx}',
+    '**/v2/db/schema2/**/*.{ts,js,tsx,jsx}',
+    '**/v2/db/schema2/**/*.schema.{ts,js,tsx,jsx}',
     '**/drizzle/**/*.{ts,js,tsx,jsx}',
     '**/*schema*.{ts,js,tsx,jsx}',
     '**/*table*.{ts,js,tsx,jsx}',

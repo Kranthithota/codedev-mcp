@@ -180,14 +180,43 @@ function parseGraphQL(content: string, file: string): ApiEndpoint[] {
 function parseExpressRoutes(content: string, file: string): ApiEndpoint[] {
   const endpoints: ApiEndpoint[] = [];
 
-  // Pattern 1: Standard router.get/post/put/delete/patch('/path', ...)
+  // Pattern 1: Named Router variables with routes
+  // Matches: export const studentSectorPriorityRoute = express.Router();
+  //          studentSectorPriorityRoute.get("/student/:studentId", handler);
+  // First, find all Router() variable declarations
+  const routerVarRegex = /(?:export\s+)?(?:const|let|var)\s+(\w+Route\w*)\s*=\s*express\.Router\(\)/gi;
+  const routerVars = new Map<string, number>();
+  let routerMatch;
+  while ((routerMatch = routerVarRegex.exec(content)) !== null) {
+    routerVars.set(routerMatch[1], routerMatch.index);
+  }
+
+  // Now find routes using these router variables
+  for (const [routerVar, varIndex] of routerVars) {
+    const routerVarRegex2 = new RegExp(`${routerVar}\\.(get|post|put|delete|patch|all|use)\\s*\\(\\s*['"\`]([^'"\`]+)['"\`]`, 'gi');
+    let routeMatch;
+    while ((routeMatch = routerVarRegex2.exec(content)) !== null) {
+      const line = content.substring(0, routeMatch.index).split('\n').length;
+      const method = routeMatch[1].toUpperCase();
+      const path = routeMatch[2];
+      if (method === 'USE' && !path.match(/^\/[^/]/)) continue;
+      endpoints.push({
+        method: method === 'ALL' ? 'ANY' : method,
+        path: path,
+        file,
+        line,
+        source: 'express',
+      });
+    }
+  }
+
+  // Pattern 1b: Standard router.get/post/put/delete/patch('/path', ...)
   // Matches: router.get('/api/users', handler) or app.post('/api/users', handler)
   // Also matches: router.get("/api/users", handler) with double quotes
   // Also matches: router.get(`/api/users`, handler) with template literals
   // Also matches: const router = express.Router(); router.get(...)
-  // Also matches: routes exported as arrays/objects
   const standardRouteRegex =
-    /(?:app|router|express\.Router\(\)|express\(\)|(?:const|let|var)\s+\w+\s*=\s*express\.Router\(\))\s*\.(get|post|put|delete|patch|all|use)\s*\(\s*['"`]([^'"`]+)['"`]/gi;
+    /(?:app|router|express\.Router\(\)|express\(\))\s*\.(get|post|put|delete|patch|all|use)\s*\(\s*['"`]([^'"`]+)['"`]/gi;
   let match;
 
   while ((match = standardRouteRegex.exec(content)) !== null) {
@@ -1004,22 +1033,36 @@ export async function analyzeApiContracts(cwd: string): Promise<ApiContractResul
 
   // Express/NestJS routes - prioritize route files
   const routeFiles = tsFiles.filter(
-    (f) => /routes?|controllers?|api|endpoints?/i.test(f) || /\.route\.(ts|js)$/i.test(f),
+    (f) => /routes?|controllers?|api|endpoints?/i.test(f) || /\.route\.(ts|js)$/i.test(f) || /_routes?\.(ts|js)$/i.test(f),
   );
   const otherTsFiles = tsFiles.filter((f) => !routeFiles.includes(f));
 
   // Check route files first (more likely to contain routes)
-  for (const f of [...routeFiles, ...otherTsFiles].slice(0, 500)) {
+  // Increased limit from 500 to 2000 to handle large projects
+  for (const f of [...routeFiles, ...otherTsFiles].slice(0, 2000)) {
     try {
       const content = await readFile(path.join(cwd, f), 'utf-8');
 
       // Enhanced Express detection - check for multiple patterns
+      // Also check for named Router variables (e.g., export const studentSectorPriorityRoute = express.Router())
       if (
         /(?:app|router|express\.Router)\.(get|post|put|delete|patch|all|use|route)\s*\(/i.test(content) ||
         /express\.Router\(\)/i.test(content) ||
         /from\s+['"]express['"]/i.test(content) ||
-        /require\s*\(['"]express['"]\)/i.test(content)
+        /require\s*\(['"]express['"]\)/i.test(content) ||
+        /(?:export\s+)?(?:const|let|var)\s+\w+Route\w*\s*=\s*express\.Router\(\)/i.test(content)
       ) {
+        const eps = parseExpressRoutes(content, f);
+        if (eps.length > 0) {
+          allEndpoints.push(...eps);
+          specFiles.push(f);
+          sources.add('express');
+        }
+      }
+      
+      // Also check for aggregator files with route arrays
+      // Matches: const defaultRoutes = [{ path: '/jobDescriptions', route: jobDescRoutes }]
+      if (/const\s+\w+Routes\s*=\s*\[[\s\S]*?\{[\s\S]*?path:[\s\S]*?route:/i.test(content)) {
         const eps = parseExpressRoutes(content, f);
         if (eps.length > 0) {
           allEndpoints.push(...eps);
