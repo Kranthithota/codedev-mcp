@@ -203,12 +203,12 @@ export async function parseCICD(cwd: string): Promise<CICDResult> {
 
   // GitHub Actions
   try {
-    const ghDir = path.join(cwd, '.github', 'workflows');
-    const ghFiles = await listFiles(ghDir, { glob: '*.{yml,yaml}' }).catch(() => [] as string[]);
+    // Use glob pattern from cwd root, not from workflows directory
+    const ghFiles = await listFiles(cwd, { glob: '.github/workflows/*.{yml,yaml}' }).catch(() => [] as string[]);
     for (const file of ghFiles) {
       try {
-        const content = await readFile(path.resolve(ghDir, file), 'utf-8');
-        pipelines.push(parseGitHubActions(content, `.github/workflows/${file}`));
+        const content = await readFile(path.join(cwd, file), 'utf-8');
+        pipelines.push(parseGitHubActions(content, file));
       } catch {
         /* skip */
       }

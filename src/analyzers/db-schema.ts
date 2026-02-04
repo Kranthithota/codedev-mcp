@@ -122,6 +122,7 @@ function parseDrizzleSchema(content: string, file: string): DBTable[] {
   // - Supports callback style: pgTable('name', (t) => ({ ... }))
   // - Supports: export const table = pgTable(...) or const table = pgTable(...)
   // - More flexible whitespace handling
+  // - Handles: export const studentSectorMappingTable = mysqlTable('student_sector_mapping', { id: varchar(...) })
   const tableMatches = content.matchAll(
     /(?:export\s+(?:const|default|function|async\s+function)\s+)?(\w+)\s*=\s*(?:pg|mysql|sqlite)Table\s*\(\s*['"`]([^'"`]+)['"`]\s*,\s*(?:\{([\s\S]*?)\}|\([^)]*\)\s*=>\s*\{([\s\S]*?)\}|\([^)]*\)\s*=>\s*\(([\s\S]*?)\))\s*\)/g,
   );
@@ -345,14 +346,20 @@ export async function analyzeDBSchema(cwd: string, options?: { directory?: strin
       const content = await readFile(path.resolve(dir, file), 'utf-8');
       // Enhanced detection: check for various Drizzle patterns
       // Also check for table definitions even if import is not present (might be re-exported)
-      if (
-        /(?:pg|mysql|sqlite)Table\s*\(|drizzle\.table|from\s+['"]drizzle-orm|import.*drizzle-orm|require\(['"]drizzle-orm/.test(
-          content,
-        )
-      ) {
+      // Check for table definitions first (most reliable indicator)
+      const hasTableDef = /(?:pg|mysql|sqlite)Table\s*\(/.test(content);
+      const hasDrizzleImport = /drizzle\.table|from\s+['"]drizzle-orm|import.*drizzle-orm|require\(['"]drizzle-orm/.test(content);
+      
+      if (hasTableDef || hasDrizzleImport) {
         const tables = parseDrizzleSchema(content, file);
-        allTables.push(...tables);
-        if (tables.length > 0) orms.add('drizzle');
+        if (tables.length > 0) {
+          allTables.push(...tables);
+          orms.add('drizzle');
+        } else if (hasTableDef) {
+          // If we found table definitions but parsing returned 0, log for debugging
+          // This helps identify parsing issues
+          console.debug(`Found Drizzle table definitions in ${file} but parsing returned 0 tables`);
+        }
       }
     } catch {
       /* skip */

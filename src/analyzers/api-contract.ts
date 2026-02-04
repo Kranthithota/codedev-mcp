@@ -183,8 +183,9 @@ function parseExpressRoutes(content: string, file: string): ApiEndpoint[] {
   // Pattern 1: Named Router variables with routes
   // Matches: export const studentSectorPriorityRoute = express.Router();
   //          studentSectorPriorityRoute.get("/student/:studentId", handler);
-  // First, find all Router() variable declarations
-  const routerVarRegex = /(?:export\s+)?(?:const|let|var)\s+(\w+Route\w*)\s*=\s*express\.Router\(\)/gi;
+  // Also matches: const router = express.Router(); router.get(...)
+  // First, find all Router() variable declarations (more flexible - not just *Route*)
+  const routerVarRegex = /(?:export\s+)?(?:const|let|var)\s+(\w+)\s*=\s*express\.Router\(\)/gi;
   const routerVars = new Map<string, number>();
   let routerMatch;
   while ((routerMatch = routerVarRegex.exec(content)) !== null) {
@@ -193,7 +194,9 @@ function parseExpressRoutes(content: string, file: string): ApiEndpoint[] {
 
   // Now find routes using these router variables
   for (const [routerVar, varIndex] of routerVars) {
-    const routerVarRegex2 = new RegExp(`${routerVar}\\.(get|post|put|delete|patch|all|use)\\s*\\(\\s*['"\`]([^'"\`]+)['"\`]`, 'gi');
+    // Escape special regex characters in routerVar name
+    const escapedVar = routerVar.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const routerVarRegex2 = new RegExp(`${escapedVar}\\.(get|post|put|delete|patch|all|use)\\s*\\(\\s*['"\`]([^'"\`]+)['"\`]`, 'gi');
     let routeMatch;
     while ((routeMatch = routerVarRegex2.exec(content)) !== null) {
       const line = content.substring(0, routeMatch.index).split('\n').length;
