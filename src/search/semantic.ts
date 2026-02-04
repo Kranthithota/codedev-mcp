@@ -332,7 +332,6 @@ const STOP_WORDS = new Set([
  * @param _filePath - The file path (unused, reserved for future language-specific chunking).
  * @returns An array of chunks with line ranges.
  */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- Reserved for future language-specific chunking
 function chunkFile(content: string, _filePath: string): { chunk: string; startLine: number; endLine: number }[] {
   const lines = content.split('\n');
   const chunks: { chunk: string; startLine: number; endLine: number }[] = [];

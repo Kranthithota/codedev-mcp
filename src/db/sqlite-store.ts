@@ -195,7 +195,6 @@ export class SqliteStore {
    * Initialize a new empty database.
    * @param _ - The working directory (unused, kept for interface compatibility).
    */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async init(_: string): Promise<void> {
     const SQL = await this.initSqlJs();
     this.db = new SQL.Database();
