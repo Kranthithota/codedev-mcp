@@ -119,13 +119,15 @@ function parseDrizzleSchema(content: string, file: string): DBTable[] {
   // - sqliteTable('name', { ... })
   // - Also matches with or without 'export const'
   // - Handles both single-line and multi-line table definitions
+  // - Supports callback style: pgTable('name', (t) => ({ ... }))
   const tableMatches = content.matchAll(
-    /(?:export\s+(?:const|default|function)\s+)?(\w+)\s*=\s*(?:pg|mysql|sqlite|drizzle\.)?Table\s*\(\s*['"`]([^'"`]+)['"`]\s*,\s*\{([\s\S]*?)\}\s*\)/g,
+    /(?:export\s+(?:const|default|function)\s+)?(\w+)\s*=\s*(?:pg|mysql|sqlite)Table\s*\(\s*['"`]([^'"`]+)['"`]\s*,\s*(?:\{([\s\S]*?)\}|\([^)]*\)\s*=>\s*\{([\s\S]*?)\})\s*\)/g,
   );
 
   for (const match of tableMatches) {
     const tableName = match[2];
-    const body = match[3];
+    // Handle both object style { ... } and callback style (t) => ({ ... })
+    const body = match[3] || match[4] || '';
     const columns: DBColumn[] = [];
 
     // Enhanced column parsing to handle various Drizzle column patterns:
@@ -133,13 +135,19 @@ function parseDrizzleSchema(content: string, file: string): DBTable[] {
     // Pattern 2: columnName: integer('columnName').primaryKey().notNull()
     // Pattern 3: columnName: text() - without explicit name (uses property name)
     // Pattern 4: columnName: varchar('columnName', { length: 255 })
+    // Pattern 5: Callback style: columnName: t.varchar('columnName') or columnName: t.integer()
     const colPatterns = [
       // Standard pattern: name: type('name') or name: type('name').modifiers()
-      /(\w+)\s*:\s*(\w+)\s*\(\s*['"`]([^'"`]+)['"`]\s*(?:,\s*[^)]+)?\)(?:\s*\.\w+\([^)]*\))*/g,
+      // Matches: id: integer('id').primaryKey() or firstName: varchar('first_name', { length: 256 })
+      /(\w+)\s*:\s*(?:t\.)?(\w+)\s*\(\s*['"`]([^'"`]+)['"`]\s*(?:,\s*[^)]+)?\)(?:\s*\.\w+\([^)]*\))*/g,
       // Pattern without explicit name: name: type() - uses property name
-      /(\w+)\s*:\s*(\w+)\s*\(\s*\)(?:\s*\.\w+\([^)]*\))*/g,
+      // Matches: id: integer() or id: t.integer()
+      /(\w+)\s*:\s*(?:t\.)?(\w+)\s*\(\s*\)(?:\s*\.\w+\([^)]*\))*/g,
       // Pattern with object config: name: type('name', { ... })
-      /(\w+)\s*:\s*(\w+)\s*\(\s*['"`]([^'"`]+)['"`]\s*,\s*\{[^}]+\}\s*\)(?:\s*\.\w+\([^)]*\))*/g,
+      // Matches: firstName: varchar('first_name', { length: 256 })
+      /(\w+)\s*:\s*(?:t\.)?(\w+)\s*\(\s*['"`]([^'"`]+)['"`]\s*,\s*\{[^}]+\}\s*\)(?:\s*\.\w+\([^)]*\))*/g,
+      // Pattern for columns without parentheses: name: type - very rare but possible
+      /(\w+)\s*:\s*(?:t\.)?(\w+)\s*(?:\.[\w()]+)*/g,
     ];
 
     for (const pattern of colPatterns) {
