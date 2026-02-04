@@ -142,24 +142,120 @@ function parseGraphQL(content: string, file: string): ApiEndpoint[] {
 
 /**
  * Parse Express/Fastify route definitions.
+ * Supports multiple Express patterns:
+ * - router.get('/path', handler)
+ * - app.post('/path', handler)
+ * - router.route('/path').get(handler).post(handler)
+ * - express.Router().get('/path', handler)
+ * - Routes with variables: router.get(pathVar, handler)
+ * - Routes with template literals: router.get(`/api/${version}/users`, handler)
  * @param content - The file content to parse.
  * @param file - The file path.
  * @returns Parsed API endpoints.
  */
 function parseExpressRoutes(content: string, file: string): ApiEndpoint[] {
   const endpoints: ApiEndpoint[] = [];
-  const routeRegex = /(?:app|router)\.(get|post|put|delete|patch)\s*\(\s*['"`]([^'"`]+)['"`]/gi;
+  
+  // Pattern 1: Standard router.get/post/put/delete/patch('/path', ...)
+  // Matches: router.get('/api/users', handler) or app.post('/api/users', handler)
+  const standardRouteRegex = /(?:app|router|express\.Router\(\)|express\(\))\.(get|post|put|delete|patch|all|use)\s*\(\s*['"`]([^'"`]+)['"`]/gi;
   let match;
-
-  while ((match = routeRegex.exec(content)) !== null) {
+  
+  while ((match = standardRouteRegex.exec(content)) !== null) {
     const line = content.substring(0, match.index).split('\n').length;
+    const method = match[1].toUpperCase();
+    const path = match[2];
+    
+    // Skip 'use' and 'all' methods unless they have specific paths
+    if (method === 'USE' && !path.match(/^\/[^/]/)) continue;
+    
     endpoints.push({
-      method: match[1].toUpperCase(),
-      path: match[2],
+      method: method === 'ALL' ? 'ANY' : method,
+      path: path,
       file,
       line,
       source: 'express',
     });
+  }
+  
+  // Pattern 2: router.route('/path').get(...).post(...)
+  const routeChainRegex = /(?:app|router)\.route\s*\(\s*['"`]([^'"`]+)['"`]\s*\)\s*\.(get|post|put|delete|patch)\s*\(/gi;
+  while ((match = routeChainRegex.exec(content)) !== null) {
+    const line = content.substring(0, match.index).split('\n').length;
+    endpoints.push({
+      method: match[2].toUpperCase(),
+      path: match[1],
+      file,
+      line,
+      source: 'express',
+    });
+  }
+  
+  // Pattern 3: Routes with variables (router.get(pathVar, handler))
+  // Try to find path variables defined earlier in the file
+  const pathVarRegex = /(?:const|let|var)\s+(\w+Path)\s*=\s*['"`]([^'"`]+)['"`]/g;
+  const pathVars = new Map<string, string>();
+  let pathMatch;
+  while ((pathMatch = pathVarRegex.exec(content)) !== null) {
+    pathVars.set(pathMatch[1], pathMatch[2]);
+  }
+  
+  // Pattern 4: Routes using path variables
+  const varRouteRegex = /(?:app|router)\.(get|post|put|delete|patch)\s*\(\s*(\w+Path)/gi;
+  while ((match = varRouteRegex.exec(content)) !== null) {
+    const pathVar = match[2];
+    const pathValue = pathVars.get(pathVar);
+    if (pathValue) {
+      const line = content.substring(0, match.index).split('\n').length;
+      endpoints.push({
+        method: match[1].toUpperCase(),
+        path: pathValue,
+        file,
+        line,
+        source: 'express',
+      });
+    }
+  }
+  
+  // Pattern 5: Template literal routes: router.get(`/api/${version}/users`, ...)
+  const templateRouteRegex = /(?:app|router)\.(get|post|put|delete|patch)\s*\(\s*`([^`]+)`/gi;
+  while ((match = templateRouteRegex.exec(content)) !== null) {
+    const line = content.substring(0, match.index).split('\n').length;
+    // Extract static parts of template literal (remove ${...} parts)
+    const path = match[2].replace(/\$\{[^}]+\}/g, '*');
+    endpoints.push({
+      method: match[1].toUpperCase(),
+      path: path,
+      file,
+      line,
+      source: 'express',
+    });
+  }
+  
+  // Pattern 6: Express Router instances: const router = express.Router(); router.get(...)
+  // This is already covered by Pattern 1, but let's also check for mounted routers
+  const mountedRouterRegex = /(?:app|router)\.use\s*\(\s*['"`]([^'"`]+)['"`]\s*,\s*(\w+Router|\w+Routes)/gi;
+  while ((match = mountedRouterRegex.exec(content)) !== null) {
+    const basePath = match[1];
+    const routerName = match[2];
+    // Try to find routes in the router definition
+    const routerDefRegex = new RegExp(`(?:const|let|var)\\s+${routerName}\\s*=\\s*express\\.Router\\(\\)[\\s\\S]*?`, 'i');
+    const routerDef = content.match(routerDefRegex);
+    if (routerDef) {
+      const routerContent = routerDef[0];
+      const routerRouteRegex = new RegExp(`(?:router|${routerName})\\.(get|post|put|delete|patch)\\s*\\(\\s*['"\`]([^'"\`]+)['"\`]`, 'gi');
+      const routerRoutes = routerContent.matchAll(routerRouteRegex);
+      for (const routeMatch of routerRoutes) {
+        const line = content.substring(0, match.index).split('\n').length;
+        endpoints.push({
+          method: routeMatch[1].toUpperCase(),
+          path: `${basePath}${routeMatch[2]}`.replace(/\/+/g, '/'),
+          file,
+          line,
+          source: 'express',
+        });
+      }
+    }
   }
 
   return endpoints;
@@ -279,11 +375,25 @@ export async function analyzeApiContracts(cwd: string): Promise<ApiContractResul
     }
   }
 
-  // Express/NestJS routes
-  for (const f of tsFiles.slice(0, 300)) {
+  // Express/NestJS routes - prioritize route files
+  const routeFiles = tsFiles.filter((f) => 
+    /routes?|controllers?|api|endpoints?/i.test(f) || 
+    /\.route\.(ts|js)$/i.test(f)
+  );
+  const otherTsFiles = tsFiles.filter((f) => !routeFiles.includes(f));
+  
+  // Check route files first (more likely to contain routes)
+  for (const f of [...routeFiles, ...otherTsFiles].slice(0, 500)) {
     try {
       const content = await readFile(path.join(cwd, f), 'utf-8');
-      if (/(?:app|router)\.(get|post|put|delete|patch)\s*\(/i.test(content)) {
+      
+      // Enhanced Express detection - check for multiple patterns
+      if (
+        /(?:app|router|express\.Router)\.(get|post|put|delete|patch|all|use|route)\s*\(/i.test(content) ||
+        /express\.Router\(\)/i.test(content) ||
+        /from\s+['"]express['"]/i.test(content) ||
+        /require\s*\(['"]express['"]\)/i.test(content)
+      ) {
         const eps = parseExpressRoutes(content, f);
         if (eps.length > 0) {
           allEndpoints.push(...eps);
@@ -291,6 +401,8 @@ export async function analyzeApiContracts(cwd: string): Promise<ApiContractResul
           sources.add('express');
         }
       }
+      
+      // NestJS detection
       if (/@Controller/.test(content)) {
         const eps = parseNestJSRoutes(content, f);
         if (eps.length > 0) {
@@ -300,7 +412,7 @@ export async function analyzeApiContracts(cwd: string): Promise<ApiContractResul
         }
       }
     } catch (error) {
-      logger.debug(`Failed to parse possible OpenAPI spec: ${f}`, { error });
+      logger.debug(`Failed to parse possible route file: ${f}`, { error });
     }
   }
 
@@ -353,7 +465,8 @@ export async function analyzeApiContracts(cwd: string): Promise<ApiContractResul
   const scannedPatterns = [
     '**/*.{json,yaml,yml} (OpenAPI/Swagger containing swagger|openapi)',
     '**/*.{graphql,gql} (GraphQL schemas)',
-    '**/*.{ts,tsx,js,jsx} (Express/NestJS routes with router.get/post/decorators)',
+    '**/routes/**/*.{ts,tsx,js,jsx} (Express route files - prioritized)',
+    '**/*.{ts,tsx,js,jsx} (Express/NestJS routes: router.get/post, router.route(), express.Router())',
     '**/*.py (FastAPI routes with @app.get/post)',
   ];
 
