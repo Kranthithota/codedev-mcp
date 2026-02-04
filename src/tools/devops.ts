@@ -65,7 +65,7 @@ export function registerDevOpsTools(server: McpServer) {
           return {
             content: [{ type: 'text', text: lines.join('\n') }],
             structuredContent: {
-              platform: result.platform,
+              platform: Array.isArray(result.platform) ? result.platform.join(', ') : result.platform || 'unknown',
               resources: result.resources?.map((r) => ({ type: r.type, name: r.name })) || [],
               issues:
                 result.issues?.map((i) => ({

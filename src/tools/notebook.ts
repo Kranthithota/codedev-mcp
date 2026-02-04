@@ -33,13 +33,13 @@ export function registerNotebookTools(server: McpServer) {
         if (params.action === 'list') {
           const notebooks = await findNotebooks(CWD);
           if (notebooks.length === 0)
-            return {
-              content: [{ type: 'text', text: 'No Jupyter notebooks (.ipynb) found in the project.' }],
-              structuredContent: { action: 'list', data: '' },
-            };
+          return {
+            content: [{ type: 'text', text: 'No Jupyter notebooks (.ipynb) found in the project.' }],
+            structuredContent: { action: 'list', data: { notebooks: [], count: 0 } },
+          };
           return {
             content: [{ type: 'text', text: `Found ${notebooks.length} notebooks:\n\n${notebooks.join('\n')}` }],
-            structuredContent: { action: 'list', data: notebooks.join('\n') },
+            structuredContent: { action: 'list', data: { notebooks, count: notebooks.length } },
           };
         }
 
@@ -71,13 +71,13 @@ export function registerNotebookTools(server: McpServer) {
             }
             return {
               content: [{ type: 'text', text: output }],
-              structuredContent: { action: 'outline', data: output },
+              structuredContent: { action: 'analyze', data: { notebook: params.file, summary: output } },
             };
           }
 
           case 'code': {
             const code = extractCode(notebook);
-            return { content: [{ type: 'text', text: code }], structuredContent: { action: 'code', data: code } };
+            return { content: [{ type: 'text', text: code }], structuredContent: { action: 'code', data: { code } } };
           }
 
           case 'health': {

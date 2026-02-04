@@ -73,8 +73,8 @@ export function registerSecurityTools(server: McpServer) {
           structuredContent: {
             issues: report.findings.map((f) => ({
               file: f.file,
-              line: f.line,
-              category: f.category,
+              line: f.line ?? undefined, // Ensure line is number or undefined (not missing)
+              type: f.category,
               severity: f.severity,
               message: f.message,
               recommendation: f.recommendation,

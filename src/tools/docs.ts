@@ -38,7 +38,7 @@ export function registerDocsTools(server: McpServer) {
           if (undoc.length === 0)
             return {
               content: [{ type: 'text', text: `All public symbols in ${params.file} are documented. ✅` }],
-              structuredContent: { action: 'undocumented', file: params.file, entries: [], total: 0 },
+              structuredContent: { action: 'undocumented', data: { file: params.file, entries: [], total: 0 } },
             };
           const output = undoc.map((u) => `  L${u.line}: ${u.symbol} (${u.type})`).join('\n');
           return {
@@ -47,9 +47,11 @@ export function registerDocsTools(server: McpServer) {
             ],
             structuredContent: {
               action: 'undocumented',
-              file: params.file,
-              entries: undoc.map((u) => ({ symbol: u.symbol, type: u.type, line: u.line })),
-              total: undoc.length,
+              data: {
+                file: params.file,
+                entries: undoc.map((u) => ({ symbol: u.symbol, type: u.type, line: u.line })),
+                total: undoc.length,
+              },
             },
           };
         }
@@ -66,7 +68,7 @@ export function registerDocsTools(server: McpServer) {
                 text: `No documentation found in ${params.file}${params.symbol ? ` for "${params.symbol}"` : ''}. Use code_docs with action "undocumented" to find undocumented APIs.`,
               },
             ],
-            structuredContent: { action: 'extract', file: params.file, entries: [], total: 0 },
+            structuredContent: { action: 'extract', data: { file: params.file, entries: [], total: 0 } },
           };
         }
 
@@ -88,9 +90,11 @@ export function registerDocsTools(server: McpServer) {
           ],
           structuredContent: {
             action: 'extract',
-            file: params.file,
-            entries: filtered.map((d) => ({ symbol: d.symbol, type: d.symbolType, line: d.line })),
-            total: filtered.length,
+            data: {
+              file: params.file,
+              entries: filtered.map((d) => ({ symbol: d.symbol, type: d.symbolType, line: d.line })),
+              total: filtered.length,
+            },
           },
         };
       } catch (error: unknown) {

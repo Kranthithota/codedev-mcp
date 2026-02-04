@@ -65,9 +65,10 @@ export function registerQualityTools(server: McpServer) {
     async (params) => {
       try {
         const searchCwd = params.directory ? safePath(params.directory) : CWD;
+        // Use simpler pattern that works with grep - escape properly for grep regex
         const results = await searchCode({
           cwd: searchCwd,
-          pattern: '(console\\.(log|debug|info|warn|error)|print\\(|println!|fmt\\.Print|System\\.out|Debug\\.Log)',
+          pattern: 'console\\.(log|debug|info|warn|error)|print\\(|println!|fmt\\.Print|System\\.out|Debug\\.Log',
           isRegex: true,
           fileGlob: params.file_glob,
           maxResults: 100,
@@ -147,14 +148,46 @@ export function registerQualityTools(server: McpServer) {
     async (params) => {
       try {
         const searchCwd = params.directory ? safePath(params.directory) : CWD;
-        const results = await searchCode({
+        // Use simpler patterns that work with grep - search for common empty catch patterns
+        // Pattern 1: catch() { } or catch(e) { }
+        const catchPattern1 = 'catch[[:space:]]*([^)]*)[[:space:]]*\\{[[:space:]]*\\}';
+        // Pattern 2: except: pass (Python)
+        const exceptPattern = 'except:[[:space:]]*pass';
+        // Pattern 3: rescue => nil (Ruby)
+        const rescuePattern = 'rescue[[:space:]]*=>[[:space:]]*nil';
+        
+        const catchResults = await searchCode({
           cwd: searchCwd,
-          pattern: '(catch\\s*\\([^)]*\\)\\s*\\{\\s*\\}|except:\\s*pass|rescue\\s*=>\\s*nil)',
+          pattern: catchPattern1,
           isRegex: true,
           fileGlob: params.file_glob,
           maxResults: 50,
           contextLines: 1,
         });
+        
+        const exceptResults = await searchCode({
+          cwd: searchCwd,
+          pattern: exceptPattern,
+          isRegex: true,
+          fileGlob: params.file_glob,
+          maxResults: 50,
+          contextLines: 1,
+        });
+        
+        const rescueResults = await searchCode({
+          cwd: searchCwd,
+          pattern: rescuePattern,
+          isRegex: true,
+          fileGlob: params.file_glob,
+          maxResults: 50,
+          contextLines: 1,
+        });
+        
+        // Combine and deduplicate results
+        const allResults = [...catchResults, ...exceptResults, ...rescueResults];
+        const results = allResults.filter((r, i, arr) => 
+          arr.findIndex((other) => other.file === r.file && other.line === r.line) === i
+        );
         const output = results.map((r) => `${r.file}:${r.line} │ ${r.text.trim()}`).join('\n');
         return {
           content: [{ type: 'text', text: `Found ${results.length} empty/swallowed error handlers:\n\n${output}` }],

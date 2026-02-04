@@ -44,8 +44,10 @@ export function registerScaffoldTools(server: McpServer) {
             return {
               content: [{ type: 'text', text: lines.join('\n') }],
               structuredContent: {
-                projectType: result.projectType,
-                templates: result.templates,
+                template: 'list',
+                fileName: '',
+                language: result.projectType,
+                generatedCode: JSON.stringify({ projectType: result.projectType, templates: result.templates }, null, 2),
               },
             };
           }
@@ -70,9 +72,10 @@ export function registerScaffoldTools(server: McpServer) {
             return {
               content: [{ type: 'text', text: lines.join('\n') }],
               structuredContent: {
+                template: result.template,
                 fileName: result.fileName,
-                code: result.generatedCode,
-                conventions: result.conventions,
+                language: result.language,
+                generatedCode: result.generatedCode,
               },
             };
           }

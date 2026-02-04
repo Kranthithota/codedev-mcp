@@ -27,7 +27,7 @@ const symbolEntry = z.object({
 
 const securityIssue = z.object({
   file: z.string(),
-  line: z.number(),
+  line: z.number().optional(),
   type: z.string(),
   severity: z.string(),
   message: z.string(),
