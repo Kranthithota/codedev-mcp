@@ -1,0 +1,100 @@
+{
+    "name": "codedev-mcp",
+    "displayName": "Universal Code Development Server",
+    "description": "Zero-API-key MCP server for code search, analysis, navigation, and review. 42 tools, semantic search, AST parsing, security scanning, and more.",
+    "version": "3.2.0",
+    "author": "codedev-mcp contributors",
+    "license": "MIT",
+    "repository": "https://github.com/example/codedev-mcp",
+    "categories": [
+        "code-analysis",
+        "developer-tools",
+        "search",
+        "navigation"
+    ],
+    "capabilities": {
+        "tools": true,
+        "resources": true,
+        "prompts": true
+    },
+    "transport": [
+        "stdio"
+    ],
+    "requirements": {
+        "node": ">=18.0.0"
+    },
+    "optionalDependencies": {
+        "ripgrep": "Enhanced code search",
+        "fd": "Fast file listing"
+    },
+    "install": {
+        "npm": "npm install -g codedev-mcp",
+        "npx": "npx codedev-mcp"
+    },
+    "configuration": {
+        "CODEDEV_MCP_CWD": {
+            "type": "string",
+            "description": "Working directory for the server"
+        },
+        "CODEDEV_ROOTS": {
+            "type": "string",
+            "description": "Comma-separated list of workspace roots"
+        },
+        "CODEDEV_TIMEOUT": {
+            "type": "number",
+            "description": "Request timeout in milliseconds",
+            "default": 30000
+        }
+    },
+    "tools": [
+        "search_code",
+        "search_symbols",
+        "find_references",
+        "semantic_search",
+        "codebase_map",
+        "analyze_file",
+        "call_graph",
+        "code_metrics",
+        "test_coverage",
+        "read_files",
+        "file_tree",
+        "git_log",
+        "git_diff",
+        "git_blame",
+        "git_status",
+        "git_branches",
+        "git_show",
+        "git_contributors",
+        "change_impact",
+        "branch_compare",
+        "git_hooks",
+        "find_todos",
+        "find_debug_logs",
+        "find_secrets",
+        "find_empty_catches",
+        "find_long_functions",
+        "find_large_files",
+        "find_duplicates",
+        "find_dead_code",
+        "code_docs",
+        "security_scan",
+        "dep_vuln_scan",
+        "notebook_analyze",
+        "architecture_check",
+        "db_schema",
+        "api_contracts",
+        "iac_analyze",
+        "cicd_analyze",
+        "monorepo_analyze",
+        "perf_profile",
+        "scaffold"
+    ],
+    "resources": [
+        "health://status"
+    ],
+    "prompts": [
+        "onboard_codebase",
+        "review_changes",
+        "investigate_symbol"
+    ]
+}

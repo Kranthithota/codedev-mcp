@@ -1,0 +1,89 @@
+{
+  "name": "codedev-mcp",
+  "version": "3.2.0",
+  "description": "Universal code development MCP server — search, analyze, navigate, review any codebase. 29 tools, semantic search, AST parsing, security scanning, dead code detection, complexity heatmaps, DB schema parsing, API discovery, IaC analysis, CI/CD parsing, monorepo support. Zero API keys.",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "codedev-mcp": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md",
+    "mcp.json"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js",
+    "inspect": "npx @modelcontextprotocol/inspector dist/index.js",
+    "prepublishOnly": "npm run build && npm audit --audit-level=high",
+    "test": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint \"src/**/*.{ts,tsx}\"",
+    "lint:fix": "eslint \"src/**/*.{ts,tsx}\" --fix",
+    "format": "prettier --write \"src/**/*.{ts,tsx,json,md}\""
+  },
+  "keywords": [
+    "mcp",
+    "modelcontextprotocol",
+    "code-search",
+    "code-review",
+    "developer-tools",
+    "ai-agent",
+    "claude-code",
+    "codex",
+    "gemini-cli",
+    "cursor",
+    "vscode",
+    "windsurf",
+    "code-analysis",
+    "codebase-navigation",
+    "semantic-search",
+    "security-scan",
+    "test-coverage",
+    "tree-sitter",
+    "call-graph",
+    "code-docs"
+  ],
+  "author": "",
+  "license": "MIT",
+  "homepage": "https://github.com/example/codedev-mcp#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/example/codedev-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/example/codedev-mcp/issues"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "chokidar": "^5.0.0",
+    "glob": "^11.0.0",
+    "ignore": "^7.0.0",
+    "sql.js": "^1.13.0",
+    "web-tree-sitter": "^0.26.5",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/eslint": "^9.6.1",
+    "@types/node": "^22.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.54.0",
+    "@typescript-eslint/parser": "^8.54.0",
+    "@vitest/coverage-v8": "^4.0.18",
+    "eslint": "^9.39.2",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-jsdoc": "^62.5.0",
+    "eslint-plugin-prettier": "^5.5.5",
+    "eslint-plugin-security": "^3.0.1",
+    "prettier": "^3.8.1",
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.54.0",
+    "vitest": "^4.0.18"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

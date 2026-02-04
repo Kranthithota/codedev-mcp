@@ -1,0 +1,141 @@
+import { z } from 'zod';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { outputSchemas } from '../schemas/output-schemas.js';
+import { CWD } from '../config.js';
+import { securityScan } from '../analyzers/security.js';
+import { scanDependencyVulns } from '../analyzers/dep-vuln.js';
+import { analytics } from '../utils/analytics.js';
+
+export function registerSecurityTools(server: McpServer) {
+    // ═══════════════════════════════════════════════════════════════════════
+    // TOOL: security_scan — Security vulnerability detection
+    // ═══════════════════════════════════════════════════════════════════════
+    server.registerTool(
+        'security_scan',
+        {
+            description:
+                'Scan codebase for security issues: hardcoded secrets, SQL injection, XSS, insecure crypto, eval usage, path traversal, and more. SAST-lite with no external dependencies.',
+            inputSchema: {
+                category: z
+                    .string()
+                    .optional()
+                    .describe('Filter by category: injection, xss, secrets, crypto, config, auth, redirect, error-handling'),
+                severity: z.string().optional().describe('Filter by severity: critical, high, medium, low'),
+                file_glob: z.string().optional().describe('Filter by file pattern'),
+            },
+            outputSchema: outputSchemas.security_scan,
+            annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+        },
+        async (params) => {
+            try {
+                const report = await securityScan(CWD, {
+                    category: params.category,
+                    severity: params.severity,
+                    fileGlob: params.file_glob,
+                });
+
+                let output = `## Security Scan Report\n\n`;
+                output += `Total findings: ${report.totalFindings}\n`;
+                output += `Severity breakdown: ${Object.entries(report.bySeverity)
+                    .map(([k, v]) => `${k}: ${v}`)
+                    .join(', ') || 'none'}\n`;
+
+                if (report.dependencyInfo) {
+                    output += `\nDependencies: ${report.dependencyInfo.directDeps} direct, ${report.dependencyInfo.total} total`;
+                    output += report.dependencyInfo.lockfileFound ? ' (lockfile ✅)' : ' (⚠️ no lockfile found)';
+                    output += '\n';
+                }
+
+                if (report.findings.length > 0) {
+                    output += '\n### Findings:\n\n';
+                    output += report.findings
+                        .slice(0, 50)
+                        .map((f) => {
+                            const icon =
+                                f.severity === 'critical' ? '🔴' : f.severity === 'high' ? '🟠' : f.severity === 'medium' ? '🟡' : '🔵';
+                            let line = `${icon} [${f.severity.toUpperCase()}] ${f.message}\n`;
+                            line += `   ${f.file}${f.line ? `:${f.line}` : ''}\n`;
+                            if (f.snippet) line += `   ${f.snippet}\n`;
+                            line += `   💡 ${f.recommendation}\n`;
+                            return line;
+                        })
+                        .join('\n');
+                }
+
+                return {
+                    content: [{ type: 'text', text: output }],
+                    structuredContent: {
+                        issues: report.findings.map((f: any) => ({
+                            file: f.file,
+                            line: f.line,
+                            type: f.type || f.pattern,
+                            severity: f.severity,
+                            message: f.message,
+                            recommendation: f.recommendation,
+                        })),
+                        total: report.totalFindings,
+                        severity: report.bySeverity,
+                    },
+                };
+            } catch (error: any) {
+                return {
+                    content: [
+                        { type: 'text', text: `security_scan failed: ${error.message}. Verify the project directory is accessible.` },
+                    ],
+                    isError: true,
+                };
+            }
+        },
+    );
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // TOOL: dep_vuln_scan — Dependency vulnerability scanning
+    // ═══════════════════════════════════════════════════════════════════════
+    server.registerTool(
+        'dep_vuln_scan',
+        {
+            description:
+                'Scan dependencies for known vulnerabilities. Cross-references package lock files (npm, Cargo, pip, Go) against a database of known-vulnerable packages. Reports severity, CVEs, and recommended upgrades.',
+            outputSchema: outputSchemas.dep_vuln_scan,
+            annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+        },
+        async () => {
+            try {
+                return await analytics.track('dep_vuln_scan', async () => {
+                    const result = await scanDependencyVulns(CWD);
+                    const lines: string[] = [`## Dependency Vulnerability Scan\n`];
+                    lines.push(`Dependencies scanned: ${result.totalDeps}`);
+                    lines.push(`Ecosystems: ${result.ecosystems.join(', ') || 'none detected'}`);
+                    lines.push(`Lock files: ${result.lockFiles.join(', ') || 'none found'}`);
+                    const s = result.summary;
+                    lines.push(`Findings: ${s.critical} critical, ${s.high} high, ${s.medium} medium, ${s.low} low\n`);
+                    if (result.vulnerabilities.length === 0) {
+                        lines.push('✅ No known vulnerabilities detected in your dependencies!');
+                    } else {
+                        for (const v of result.vulnerabilities) {
+                            const icon =
+                                v.severity === 'critical' ? '🔴' : v.severity === 'high' ? '🟠' : v.severity === 'medium' ? '🟡' : '🔵';
+                            lines.push(`${icon} [${v.severity.toUpperCase()}] ${v.name} @${v.version} — ${v.reason}`);
+                            if (v.recommendation) lines.push(`   ↳ ${v.recommendation}`);
+                        }
+                    }
+                    return {
+                        content: [{ type: 'text', text: lines.join('\n') }],
+                        structuredContent: {
+                            vulnerabilities: (result.vulnerabilities || []).map((v: any) => ({
+                                package: v.name || v.package,
+                                severity: v.severity,
+                                description: v.reason || v.description || '',
+                            })),
+                            totalDeps: result.totalDeps || 0,
+                            outdatedCount: result.outdatedCount || 0,
+                            summary: result.summary || {},
+                        },
+                    };
+                });
+            } catch (error: any) {
+                return { content: [{ type: 'text', text: `dep_vuln_scan failed: ${error.message}` }], isError: true };
+            }
+        },
+    );
+}

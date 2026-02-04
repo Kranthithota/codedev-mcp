@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  codedev-mcp:
+    build: .
+    stdin_open: true   # Required for stdio MCP transport
+    tty: true
+    volumes:
+      # Mount your project directory as read-only
+      - ${PROJECT_DIR:-.}:/workspace:ro
+    environment:
+      - CODEDEV_MCP_CWD=/workspace
+    # Optional: resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0'
