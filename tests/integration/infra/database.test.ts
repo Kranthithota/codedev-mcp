@@ -14,7 +14,7 @@ describe('Database Integration', () => {
     });
 
     afterEach(async () => {
-        store.close();
+        await store.close();
         // Clean up temp directory
         try {
             await rm(testDir, { recursive: true, force: true });
