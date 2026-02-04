@@ -2,7 +2,12 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { outputSchemas } from '../schemas/output-schemas.js';
 import { CWD, safePath } from '../config.js';
-import { searchCode } from '../search/fast-search.js';
+import { searchCode, listFiles } from '../search/fast-search.js';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import { parseAST } from '../analyzers/tree-sitter.js';
+import { extractSymbols } from '../analyzers/symbols.js';
+import { detectLanguage } from '../utils/languages.js';
 
 /**
  * Registers code quality tools for finding TODOs, debug logs, secrets, empty catches, duplicates, and dead code.
@@ -228,16 +233,94 @@ export function registerQualityTools(server: McpServer) {
       annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
     },
     async (params) => {
-      const threshold = params.threshold || 50;
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Tip: Use "code_metrics" or "analyze_file" to find functions over ${threshold} lines. These tools use AST parsing for accurate function length detection.`,
+      try {
+        const threshold = params.threshold || 50;
+        const searchCwd = params.directory ? safePath(params.directory) : CWD;
+        const fileGlob = params.file_glob || '**/*.{ts,tsx,js,jsx,py,go,java,rs,c,cpp}';
+        
+        const files = await listFiles(searchCwd, { glob: fileGlob });
+        const matches: Array<{ file: string; line: number; match: string }> = [];
+        
+        for (const file of files.slice(0, 200)) {
+          try {
+            const filePath = path.join(searchCwd, file);
+            const language = detectLanguage(file);
+            
+            // Try AST parsing first
+            const astSymbols = await parseAST(filePath, language);
+            if (astSymbols) {
+              for (const symbol of astSymbols) {
+                if ((symbol.type === 'function' || symbol.type === 'method') && symbol.endLine && symbol.startLine) {
+                  const lineCount = symbol.endLine - symbol.startLine + 1;
+                  if (lineCount > threshold) {
+                    matches.push({
+                      file,
+                      line: symbol.startLine,
+                      match: `${symbol.name}() - ${lineCount} lines`,
+                    });
+                  }
+                }
+              }
+            } else {
+              // Fallback to regex-based extraction
+              const symbols = await extractSymbols(filePath);
+              const content = await readFile(filePath, 'utf-8');
+              const lines = content.split('\n');
+              
+              for (const symbol of symbols.filter((s) => s.kind === 'function')) {
+                // Find function end by looking for closing brace
+                let braceCount = 0;
+                let inFunction = false;
+                let startLine = symbol.line;
+                let endLine = startLine;
+                
+                for (let i = symbol.line - 1; i < lines.length; i++) {
+                  const line = lines[i];
+                  if (!inFunction && /function\s+\w+|=>\s*\{|^\s*\w+\s*\([^)]*\)\s*\{/.test(line)) {
+                    inFunction = true;
+                    startLine = i + 1;
+                  }
+                  if (inFunction) {
+                    braceCount += (line.match(/\{/g) || []).length;
+                    braceCount -= (line.match(/\}/g) || []).length;
+                    if (braceCount === 0 && inFunction) {
+                      endLine = i + 1;
+                      break;
+                    }
+                  }
+                }
+                
+                const lineCount = endLine - startLine + 1;
+                if (lineCount > threshold) {
+                  matches.push({
+                    file,
+                    line: startLine,
+                    match: `${symbol.name}() - ${lineCount} lines`,
+                  });
+                }
+              }
+            }
+          } catch {
+            // Skip files that can't be parsed
+            continue;
+          }
+        }
+        
+        const output = matches.map((m) => `${m.file}:${m.line} │ ${m.match}`).join('\n');
+        return {
+          content: [{ type: 'text', text: `Found ${matches.length} functions exceeding ${threshold} lines:\n\n${output || 'None found'}` }],
+          structuredContent: {
+            check: 'long_functions',
+            matches,
+            total: matches.length,
           },
-        ],
-        structuredContent: { check: 'long_functions', matches: [], total: 0 },
-      };
+        };
+      } catch (error: unknown) {
+        return {
+          content: [{ type: 'text', text: `find_long_functions failed: ${(error as Error).message}` }],
+          structuredContent: { check: 'long_functions', matches: [], total: 0 },
+        };
+      }
     },
   );
 
@@ -257,16 +340,55 @@ export function registerQualityTools(server: McpServer) {
       annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
     },
     async (params) => {
-      const threshold = params.threshold || 500;
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Tip: Use "codebase_map" or "file_tree" to see file sizes. Use "code_metrics" with a threshold of ${threshold} to identify large files programmatically.`,
+      try {
+        const threshold = params.threshold || 500;
+        const searchCwd = params.directory ? safePath(params.directory) : CWD;
+        const fileGlob = params.file_glob || '**/*';
+        
+        const files = await listFiles(searchCwd, { glob: fileGlob });
+        const matches: Array<{ file: string; line: number; match: string }> = [];
+        
+        for (const file of files.slice(0, 500)) {
+          try {
+            const filePath = path.join(searchCwd, file);
+            const content = await readFile(filePath, 'utf-8');
+            const lineCount = content.split('\n').length;
+            
+            if (lineCount > threshold) {
+              matches.push({
+                file,
+                line: 1,
+                match: `${lineCount} lines`,
+              });
+            }
+          } catch {
+            // Skip files that can't be read
+            continue;
+          }
+        }
+        
+        // Sort by line count descending
+        matches.sort((a, b) => {
+          const aLines = parseInt(a.match.match(/\d+/)?.[0] || '0', 10);
+          const bLines = parseInt(b.match.match(/\d+/)?.[0] || '0', 10);
+          return bLines - aLines;
+        });
+        
+        const output = matches.map((m) => `${m.file}:${m.match}`).join('\n');
+        return {
+          content: [{ type: 'text', text: `Found ${matches.length} files exceeding ${threshold} lines:\n\n${output || 'None found'}` }],
+          structuredContent: {
+            check: 'large_files',
+            matches,
+            total: matches.length,
           },
-        ],
-        structuredContent: { check: 'large_files', matches: [], total: 0 },
-      };
+        };
+      } catch (error: unknown) {
+        return {
+          content: [{ type: 'text', text: `find_large_files failed: ${(error as Error).message}` }],
+          structuredContent: { check: 'large_files', matches: [], total: 0 },
+        };
+      }
     },
   );
 
@@ -279,6 +401,7 @@ export function registerQualityTools(server: McpServer) {
       description: 'Find duplicate code patterns and copy-pasted blocks.',
       inputSchema: {
         pattern: z.string().optional().describe('Specific pattern to search for duplicates'),
+        min_length: z.number().optional().describe('Minimum length of duplicate block in lines (default: 5)'),
         file_glob: z.string().optional().describe('Filter by file pattern'),
         directory: z.string().optional().describe('Subdirectory to search'),
       },
@@ -286,9 +409,11 @@ export function registerQualityTools(server: McpServer) {
       annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
     },
     async (params) => {
-      if (params.pattern) {
-        try {
-          const searchCwd = params.directory ? safePath(params.directory) : CWD;
+      try {
+        const searchCwd = params.directory ? safePath(params.directory) : CWD;
+        
+        if (params.pattern) {
+          // Pattern-based search
           const results = await searchCode({
             cwd: searchCwd,
             pattern: params.pattern,
@@ -305,22 +430,81 @@ export function registerQualityTools(server: McpServer) {
               total: results.length,
             },
           };
-        } catch (error: unknown) {
-          return {
-            content: [{ type: 'text', text: `find_duplicates failed: ${(error as Error).message}` }],
-            structuredContent: { check: 'duplicates', matches: [], total: 0 },
-          };
         }
-      }
-      return {
-        content: [
-          {
-            type: 'text',
-            text: 'Tip: Use "search_code" to find repeated patterns. Provide a specific pattern to this tool to count occurrences across the codebase.',
+        
+        // AST-based duplicate detection
+        const minLength = params.min_length || 5;
+        const fileGlob = params.file_glob || '**/*.{ts,tsx,js,jsx,py,go,java,rs}';
+        const files = await listFiles(searchCwd, { glob: fileGlob });
+        const codeBlocks = new Map<string, Array<{ file: string; line: number }>>();
+        const matches: Array<{ file: string; line: number; match: string }> = [];
+        
+        // Extract function bodies and look for duplicates
+        for (const file of files.slice(0, 100)) {
+          try {
+            const filePath = path.join(searchCwd, file);
+            const language = detectLanguage(file);
+            const content = await readFile(filePath, 'utf-8');
+            const lines = content.split('\n');
+            
+            // Try AST parsing first
+            const astSymbols = await parseAST(filePath, language);
+            if (astSymbols) {
+              for (const symbol of astSymbols) {
+                if ((symbol.type === 'function' || symbol.type === 'method') && symbol.endLine && symbol.startLine) {
+                  const lineCount = symbol.endLine - symbol.startLine + 1;
+                  if (lineCount >= minLength) {
+                    const body = lines.slice(symbol.startLine - 1, symbol.endLine).join('\n');
+                    // Normalize whitespace for comparison
+                    const normalized = body.replace(/\s+/g, ' ').trim();
+                    if (normalized.length > 50) {
+                      // Only consider substantial blocks
+                      const key = normalized.slice(0, 200); // Use first 200 chars as key
+                      if (!codeBlocks.has(key)) {
+                        codeBlocks.set(key, []);
+                      }
+                      codeBlocks.get(key)!.push({ file, line: symbol.startLine });
+                    }
+                  }
+                }
+              }
+            }
+          } catch {
+            continue;
+          }
+        }
+        
+        // Find duplicates (appearing in 2+ files)
+        for (const [key, locations] of codeBlocks.entries()) {
+          if (locations.length >= 2) {
+            const uniqueFiles = new Set(locations.map((l) => l.file));
+            if (uniqueFiles.size >= 2) {
+              for (const loc of locations) {
+                matches.push({
+                  file: loc.file,
+                  line: loc.line,
+                  match: `Duplicate code block (found in ${locations.length} locations)`,
+                });
+              }
+            }
+          }
+        }
+        
+        const output = matches.slice(0, 50).map((m) => `${m.file}:${m.line} │ ${m.match}`).join('\n');
+        return {
+          content: [{ type: 'text', text: `Found ${matches.length} duplicate code blocks (min ${minLength} lines):\n\n${output || 'None found'}` }],
+          structuredContent: {
+            check: 'duplicates',
+            matches: matches.slice(0, 100),
+            total: matches.length,
           },
-        ],
-        structuredContent: { check: 'duplicates', matches: [], total: 0 },
-      };
+        };
+      } catch (error: unknown) {
+        return {
+          content: [{ type: 'text', text: `find_duplicates failed: ${(error as Error).message}` }],
+          structuredContent: { check: 'duplicates', matches: [], total: 0 },
+        };
+      }
     },
   );
 
@@ -338,16 +522,83 @@ export function registerQualityTools(server: McpServer) {
       outputSchema: outputSchemas.find_pattern,
       annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
     },
-    async () => {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: 'Tip: Use "search_symbols" to find all exports, then use "find_references" on each symbol to check usage. Symbols with 0 references (excluding their definition) are potentially dead code.',
+    async (params) => {
+      try {
+        const searchCwd = params.directory ? safePath(params.directory) : CWD;
+        const fileGlob = params.file_glob || '**/*.{ts,tsx,js,jsx,py,go,java,rs}';
+        const files = await listFiles(searchCwd, { glob: fileGlob });
+        const matches: Array<{ file: string; line: number; match: string }> = [];
+        
+        // Collect all exported symbols
+        const exportedSymbols: Array<{ file: string; name: string; line: number; kind: string }> = [];
+        
+        for (const file of files.slice(0, 200)) {
+          try {
+            const filePath = path.join(searchCwd, file);
+            const symbols = await extractSymbols(filePath);
+            
+            for (const symbol of symbols) {
+              // Check if it's exported
+              if (symbol.kind === 'export' || symbol.signature?.includes('export')) {
+                exportedSymbols.push({
+                  file,
+                  name: symbol.name,
+                  line: symbol.line,
+                  kind: symbol.kind,
+                });
+              }
+            }
+          } catch {
+            continue;
+          }
+        }
+        
+        // Check references for each exported symbol
+        for (const symbol of exportedSymbols.slice(0, 100)) {
+          try {
+            // Search for references to this symbol
+            const references = await searchCode({
+              cwd: searchCwd,
+              pattern: symbol.name,
+              isRegex: false,
+              fileGlob,
+              wholeWord: true,
+              maxResults: 50,
+            });
+            
+            // Filter out the definition itself
+            const externalRefs = references.filter(
+              (r: { file: string; line: number }) => !(r.file === symbol.file && r.line === symbol.line),
+            );
+            
+            if (externalRefs.length === 0) {
+              matches.push({
+                file: symbol.file,
+                line: symbol.line,
+                match: `Unused export: ${symbol.name} (${symbol.kind})`,
+              });
+            }
+          } catch {
+            // Skip if reference finding fails
+            continue;
+          }
+        }
+        
+        const output = matches.map((m) => `${m.file}:${m.line} │ ${m.match}`).join('\n');
+        return {
+          content: [{ type: 'text', text: `Found ${matches.length} potentially unused exports:\n\n${output || 'None found'}` }],
+          structuredContent: {
+            check: 'dead_code',
+            matches,
+            total: matches.length,
           },
-        ],
-        structuredContent: { check: 'dead_code', matches: [], total: 0 },
-      };
+        };
+      } catch (error: unknown) {
+        return {
+          content: [{ type: 'text', text: `find_dead_code failed: ${(error as Error).message}` }],
+          structuredContent: { check: 'dead_code', matches: [], total: 0 },
+        };
+      }
     },
   );
 }

@@ -87,6 +87,28 @@ export class SqliteStore {
   }
 
   /**
+   * Execute a statement with bind parameters (INSERT, UPDATE, DELETE).
+   * Uses prepared statements to properly handle parameters.
+   * @param sql - The SQL statement string.
+   * @param params - Bind parameters for the statement.
+   */
+  private execute(sql: string, params: unknown[] = []): void {
+    if (!this.db) return;
+    try {
+      const db = this.db as unknown as {
+        prepare(sql: string): { bind(params: unknown[]): void; step(): boolean; free(): void };
+      };
+      const stmt = db.prepare(sql);
+      stmt.bind(params);
+      stmt.step(); // Execute the statement
+      stmt.free();
+    } catch (error) {
+      // Log error but don't throw - allows graceful degradation
+      console.error(`SQL execution error: ${error}`, { sql, params });
+    }
+  }
+
+  /**
    * Create tables if they don't exist.
    */
   private createSchema(): void {
@@ -145,8 +167,8 @@ export class SqliteStore {
     this.db.run(`CREATE INDEX IF NOT EXISTS idx_usage_ts ON usage_stats(timestamp)`);
 
     // Set schema version
-    this.db.run(`INSERT OR REPLACE INTO meta (key, value) VALUES ('version', ?)`, [String(SCHEMA_VERSION)]);
-    this.db.run(`INSERT OR REPLACE INTO meta (key, value) VALUES ('updated', ?)`, [new Date().toISOString()]);
+    this.execute(`INSERT OR REPLACE INTO meta (key, value) VALUES ('version', ?)`, [String(SCHEMA_VERSION)]);
+    this.execute(`INSERT OR REPLACE INTO meta (key, value) VALUES ('updated', ?)`, [new Date().toISOString()]);
   }
 
   /**
@@ -183,7 +205,7 @@ export class SqliteStore {
    */
   async save(): Promise<void> {
     if (!this.db || !this.dirty) return;
-    this.db.run(`INSERT OR REPLACE INTO meta (key, value) VALUES ('updated', ?)`, [new Date().toISOString()]);
+    this.execute(`INSERT OR REPLACE INTO meta (key, value) VALUES ('updated', ?)`, [new Date().toISOString()]);
     const data = this.db.export();
     const dir = path.dirname(this.dbPath);
     await mkdir(dir, { recursive: true });
@@ -199,7 +221,7 @@ export class SqliteStore {
     const SQL = await this.initSqlJs();
     this.db = new SQL.Database();
     this.createSchema();
-    this.db.run(`INSERT OR REPLACE INTO meta (key, value) VALUES ('created', ?)`, [new Date().toISOString()]);
+    this.execute(`INSERT OR REPLACE INTO meta (key, value) VALUES ('created', ?)`, [new Date().toISOString()]);
     this.dirty = true;
   }
 
@@ -227,7 +249,7 @@ export class SqliteStore {
    */
   updateFile(file: IndexedFile): void {
     if (!this.db) return;
-    this.db.run(`INSERT OR REPLACE INTO files (path, mtime, lines, language, size) VALUES (?, ?, ?, ?, ?)`, [
+    this.execute(`INSERT OR REPLACE INTO files (path, mtime, lines, language, size) VALUES (?, ?, ?, ?, ?)`, [
       file.path,
       file.mtime,
       file.lines,
@@ -244,9 +266,9 @@ export class SqliteStore {
    */
   updateSymbols(filePath: string, symbols: IndexedSymbol[]): void {
     if (!this.db) return;
-    this.db.run(`DELETE FROM symbols WHERE file = ?`, [filePath]);
+    this.execute(`DELETE FROM symbols WHERE file = ?`, [filePath]);
     for (const s of symbols) {
-      this.db.run(`INSERT INTO symbols (name, type, file, line, exported) VALUES (?, ?, ?, ?, ?)`, [
+      this.execute(`INSERT INTO symbols (name, type, file, line, exported) VALUES (?, ?, ?, ?, ?)`, [
         s.name,
         s.type,
         s.file,
@@ -264,9 +286,9 @@ export class SqliteStore {
    */
   updateImports(filePath: string, imports: string[]): void {
     if (!this.db) return;
-    this.db.run(`DELETE FROM imports WHERE file = ?`, [filePath]);
+    this.execute(`DELETE FROM imports WHERE file = ?`, [filePath]);
     for (const imp of imports) {
-      this.db.run(`INSERT INTO imports (file, import_path) VALUES (?, ?)`, [filePath, imp]);
+      this.execute(`INSERT INTO imports (file, import_path) VALUES (?, ?)`, [filePath, imp]);
     }
     this.dirty = true;
   }
@@ -339,9 +361,9 @@ export class SqliteStore {
    */
   removeFile(filePath: string): void {
     if (!this.db) return;
-    this.db.run(`DELETE FROM files WHERE path = ?`, [filePath]);
-    this.db.run(`DELETE FROM symbols WHERE file = ?`, [filePath]);
-    this.db.run(`DELETE FROM imports WHERE file = ?`, [filePath]);
+    this.execute(`DELETE FROM files WHERE path = ?`, [filePath]);
+    this.execute(`DELETE FROM symbols WHERE file = ?`, [filePath]);
+    this.execute(`DELETE FROM imports WHERE file = ?`, [filePath]);
     this.dirty = true;
   }
 
@@ -383,7 +405,7 @@ export class SqliteStore {
    */
   logUsage(tool: string, duration: number, success: boolean, cached: boolean): void {
     if (!this.db) return;
-    this.db.run(`INSERT INTO usage_stats (tool, timestamp, duration, success, cached) VALUES (?, ?, ?, ?, ?)`, [
+    this.execute(`INSERT INTO usage_stats (tool, timestamp, duration, success, cached) VALUES (?, ?, ?, ?, ?)`, [
       tool,
       Date.now(),
       duration,
