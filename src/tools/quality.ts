@@ -384,7 +384,7 @@ export function registerQualityTools(server: McpServer) {
                 }
               }
             }
-          } catch (error) {
+          } catch {
             // Skip files that can't be parsed, but log for debugging
             continue;
           }
@@ -604,7 +604,7 @@ export function registerQualityTools(server: McpServer) {
         }
 
         // Find duplicates (appearing in 2+ files)
-        for (const [key, locations] of codeBlocks.entries()) {
+        for (const [, locations] of codeBlocks.entries()) {
           if (locations.length >= 2) {
             const uniqueFiles = new Set(locations.map((l) => l.file));
             if (uniqueFiles.size >= 2) {

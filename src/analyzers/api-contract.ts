@@ -68,7 +68,7 @@ function parseOpenAPI(content: string, file: string): ApiEndpoint[] {
     const spec = JSON.parse(content);
     const paths = spec.paths || {};
     for (const [urlPath, methods] of Object.entries(paths)) {
-      for (const [, rawDetails] of Object.entries(methods as Record<string, unknown>)) {
+      for (const [method, rawDetails] of Object.entries(methods as Record<string, unknown>)) {
         if (['get', 'post', 'put', 'delete', 'patch', 'options', 'head'].includes(method)) {
           const details = rawDetails as Record<string, unknown>;
           const paramsList = (details.parameters || []) as Record<string, unknown>[];
@@ -1020,8 +1020,8 @@ export async function analyzeApiContracts(cwd: string): Promise<ApiContractResul
         specFiles.push(f);
         sources.add('openapi');
       }
-    } catch (error) {
-      logger.debug(`Failed to parse possible OpenAPI spec: ${f}`, { error });
+    } catch {
+      // Skip invalid OpenAPI specs
     }
   }
 
@@ -1035,8 +1035,8 @@ export async function analyzeApiContracts(cwd: string): Promise<ApiContractResul
         specFiles.push(f);
         sources.add('graphql');
       }
-    } catch (error) {
-      logger.debug(`Failed to parse possible OpenAPI spec: ${f}`, { error });
+    } catch {
+      // Skip invalid OpenAPI specs
     }
   }
 
@@ -1365,8 +1365,8 @@ export async function analyzeApiContracts(cwd: string): Promise<ApiContractResul
           sources.add('graphql');
         }
       }
-    } catch (error) {
-      logger.debug(`Failed to parse possible OpenAPI spec: ${f}`, { error });
+    } catch {
+      // Skip invalid OpenAPI specs
     }
   }
 

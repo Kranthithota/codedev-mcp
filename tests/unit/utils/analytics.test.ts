@@ -21,7 +21,8 @@ describe('Analytics', () => {
     it('should record usage in memory', async () => {
         analytics.record('test_tool', 100, true);
         // Wait for async op to settle so it doesn't bleed into next test
-        await new Promise(resolve => setTimeout(resolve, 50));
+        // Need to wait longer to ensure lazy import and promise chain complete
+        await new Promise(resolve => setTimeout(resolve, 100));
 
         // We can't access private 'calls' property easily, but we can verify side effects if any.
         // The class exposes getStats? No, checking the file previously viewed.
@@ -36,8 +37,8 @@ describe('Analytics', () => {
 
         analytics.record('db_tool', 50, true);
 
-        // Wait for async op
-        await new Promise(resolve => setTimeout(resolve, 50));
+        // Wait for async op (lazy import + promise chain)
+        await new Promise(resolve => setTimeout(resolve, 100));
 
         expect(mockLogUsage).toHaveBeenCalledWith('db_tool', 50, true, false);
         expect(mockSave).toHaveBeenCalled();

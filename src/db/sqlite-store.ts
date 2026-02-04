@@ -10,6 +10,7 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { stat as fsStat } from 'node:fs/promises';
 import type { Database as SqlJsDatabase, SqlJsStatic } from 'sql.js';
+import { logger } from '../utils/logger.js';
 
 interface IndexedFile {
   path: string;
@@ -106,7 +107,7 @@ export class SqliteStore {
       stmt.free();
     } catch (error) {
       // Log error but don't throw - allows graceful degradation
-      console.error(`SQL execution error: ${error}`, { sql, params });
+      logger.error('SQL execution error', error instanceof Error ? error : String(error), { sql, params });
     }
   }
 
@@ -231,7 +232,7 @@ export class SqliteStore {
         await this.save();
       } catch (error) {
         // Silently ignore save errors to avoid breaking tool execution
-        console.error('Auto-save failed:', error);
+        logger.error('Auto-save failed', error instanceof Error ? error : String(error));
       }
       this.saveTimeout = null;
     }, this.AUTO_SAVE_DELAY);
@@ -431,7 +432,7 @@ export class SqliteStore {
         await this.save();
       } catch (error) {
         // Log but don't throw - we're closing anyway
-        console.error('Error saving database on close:', error);
+        logger.error('Error saving database on close', error instanceof Error ? error : String(error));
       }
     }
 
