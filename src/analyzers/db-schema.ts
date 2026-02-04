@@ -148,7 +148,7 @@ function parseDrizzleSchema(content: string, file: string): DBTable[] {
         const propertyName = col[1];
         const columnType = col[2];
         const columnName = col[3] || propertyName; // Use explicit name or fallback to property name
-        
+
         // Skip if we already have this column (from a previous pattern match)
         if (columns.some((c) => c.name === columnName)) continue;
 
@@ -157,16 +157,16 @@ function parseDrizzleSchema(content: string, file: string): DBTable[] {
         // Find the full column definition to check for modifiers
         // Look for the complete column definition including method chains
         const colStart = body.indexOf(col[0]);
-        let colEnd = body.indexOf(',', colStart);
+        const colEnd = body.indexOf(',', colStart);
         const colEnd2 = body.indexOf('\n', colStart);
         const colEnd3 = body.indexOf('}', colStart);
-        
+
         // Find the actual end of the column definition
         let actualEnd = body.length;
         if (colEnd !== -1 && (colEnd2 === -1 || colEnd < colEnd2)) actualEnd = Math.min(actualEnd, colEnd);
         if (colEnd2 !== -1) actualEnd = Math.min(actualEnd, colEnd2);
         if (colEnd3 !== -1) actualEnd = Math.min(actualEnd, colEnd3);
-        
+
         const fullColumnDef = body.slice(colStart, actualEnd);
 
         // Check for Drizzle column modifiers
@@ -184,7 +184,7 @@ function parseDrizzleSchema(content: string, file: string): DBTable[] {
           /\.references\s*\(\s*\(\)\s*=>\s*(\w+)\s*\(\s*\)\.(\w+)/,
           /\.references\s*\(\s*(\w+)\.(\w+)/,
         ];
-        
+
         for (const refPattern of refPatterns) {
           const refMatch = fullColumnDef.match(refPattern);
           if (refMatch) {

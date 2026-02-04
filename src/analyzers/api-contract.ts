@@ -20,7 +20,31 @@ export interface ApiEndpoint {
   requestBody?: string;
   responseType?: string;
   description?: string;
-  source: 'openapi' | 'graphql' | 'trpc' | 'express' | 'fastapi' | 'nestjs';
+  source:
+    | 'openapi'
+    | 'graphql'
+    | 'trpc'
+    | 'express'
+    | 'fastapi'
+    | 'nestjs'
+    | 'flask'
+    | 'django'
+    | 'rails'
+    | 'sinatra'
+    | 'laravel'
+    | 'spring'
+    | 'jaxrs'
+    | 'gin'
+    | 'echo'
+    | 'fiber'
+    | 'chi'
+    | 'actix'
+    | 'rocket'
+    | 'axum'
+    | 'aspnet'
+    | 'koa'
+    | 'fastify'
+    | 'hapi';
 }
 
 export interface ApiContractResult {
@@ -155,20 +179,21 @@ function parseGraphQL(content: string, file: string): ApiEndpoint[] {
  */
 function parseExpressRoutes(content: string, file: string): ApiEndpoint[] {
   const endpoints: ApiEndpoint[] = [];
-  
+
   // Pattern 1: Standard router.get/post/put/delete/patch('/path', ...)
   // Matches: router.get('/api/users', handler) or app.post('/api/users', handler)
-  const standardRouteRegex = /(?:app|router|express\.Router\(\)|express\(\))\.(get|post|put|delete|patch|all|use)\s*\(\s*['"`]([^'"`]+)['"`]/gi;
+  const standardRouteRegex =
+    /(?:app|router|express\.Router\(\)|express\(\))\.(get|post|put|delete|patch|all|use)\s*\(\s*['"`]([^'"`]+)['"`]/gi;
   let match;
-  
+
   while ((match = standardRouteRegex.exec(content)) !== null) {
     const line = content.substring(0, match.index).split('\n').length;
     const method = match[1].toUpperCase();
     const path = match[2];
-    
+
     // Skip 'use' and 'all' methods unless they have specific paths
     if (method === 'USE' && !path.match(/^\/[^/]/)) continue;
-    
+
     endpoints.push({
       method: method === 'ALL' ? 'ANY' : method,
       path: path,
@@ -177,9 +202,10 @@ function parseExpressRoutes(content: string, file: string): ApiEndpoint[] {
       source: 'express',
     });
   }
-  
+
   // Pattern 2: router.route('/path').get(...).post(...)
-  const routeChainRegex = /(?:app|router)\.route\s*\(\s*['"`]([^'"`]+)['"`]\s*\)\s*\.(get|post|put|delete|patch)\s*\(/gi;
+  const routeChainRegex =
+    /(?:app|router)\.route\s*\(\s*['"`]([^'"`]+)['"`]\s*\)\s*\.(get|post|put|delete|patch)\s*\(/gi;
   while ((match = routeChainRegex.exec(content)) !== null) {
     const line = content.substring(0, match.index).split('\n').length;
     endpoints.push({
@@ -190,7 +216,7 @@ function parseExpressRoutes(content: string, file: string): ApiEndpoint[] {
       source: 'express',
     });
   }
-  
+
   // Pattern 3: Routes with variables (router.get(pathVar, handler))
   // Try to find path variables defined earlier in the file
   const pathVarRegex = /(?:const|let|var)\s+(\w+Path)\s*=\s*['"`]([^'"`]+)['"`]/g;
@@ -199,7 +225,7 @@ function parseExpressRoutes(content: string, file: string): ApiEndpoint[] {
   while ((pathMatch = pathVarRegex.exec(content)) !== null) {
     pathVars.set(pathMatch[1], pathMatch[2]);
   }
-  
+
   // Pattern 4: Routes using path variables
   const varRouteRegex = /(?:app|router)\.(get|post|put|delete|patch)\s*\(\s*(\w+Path)/gi;
   while ((match = varRouteRegex.exec(content)) !== null) {
@@ -216,7 +242,7 @@ function parseExpressRoutes(content: string, file: string): ApiEndpoint[] {
       });
     }
   }
-  
+
   // Pattern 5: Template literal routes: router.get(`/api/${version}/users`, ...)
   const templateRouteRegex = /(?:app|router)\.(get|post|put|delete|patch)\s*\(\s*`([^`]+)`/gi;
   while ((match = templateRouteRegex.exec(content)) !== null) {
@@ -231,7 +257,7 @@ function parseExpressRoutes(content: string, file: string): ApiEndpoint[] {
       source: 'express',
     });
   }
-  
+
   // Pattern 6: Express Router instances: const router = express.Router(); router.get(...)
   // This is already covered by Pattern 1, but let's also check for mounted routers
   const mountedRouterRegex = /(?:app|router)\.use\s*\(\s*['"`]([^'"`]+)['"`]\s*,\s*(\w+Router|\w+Routes)/gi;
@@ -239,11 +265,17 @@ function parseExpressRoutes(content: string, file: string): ApiEndpoint[] {
     const basePath = match[1];
     const routerName = match[2];
     // Try to find routes in the router definition
-    const routerDefRegex = new RegExp(`(?:const|let|var)\\s+${routerName}\\s*=\\s*express\\.Router\\(\\)[\\s\\S]*?`, 'i');
+    const routerDefRegex = new RegExp(
+      `(?:const|let|var)\\s+${routerName}\\s*=\\s*express\\.Router\\(\\)[\\s\\S]*?`,
+      'i',
+    );
     const routerDef = content.match(routerDefRegex);
     if (routerDef) {
       const routerContent = routerDef[0];
-      const routerRouteRegex = new RegExp(`(?:router|${routerName})\\.(get|post|put|delete|patch)\\s*\\(\\s*['"\`]([^'"\`]+)['"\`]`, 'gi');
+      const routerRouteRegex = new RegExp(
+        `(?:router|${routerName})\\.(get|post|put|delete|patch)\\s*\\(\\s*['"\`]([^'"\`]+)['"\`]`,
+        'gi',
+      );
       const routerRoutes = routerContent.matchAll(routerRouteRegex);
       for (const routeMatch of routerRoutes) {
         const line = content.substring(0, match.index).split('\n').length;
@@ -330,6 +362,568 @@ function parseNestJSRoutes(content: string, file: string): ApiEndpoint[] {
 }
 
 /**
+ * Parse Flask route decorators.
+ * @param content - The file content to parse.
+ * @param file - The file path.
+ * @returns Parsed API endpoints.
+ */
+function parseFlaskRoutes(content: string, file: string): ApiEndpoint[] {
+  const endpoints: ApiEndpoint[] = [];
+  const routeRegex = /@(?:app|blueprint|router)\.(route|get|post|put|delete|patch)\s*\(\s*['"]([^'"]+)['"]/gi;
+  let match;
+
+  while ((match = routeRegex.exec(content)) !== null) {
+    const line = content.substring(0, match.index).split('\n').length;
+    const method = match[1].toUpperCase() === 'ROUTE' ? 'GET' : match[1].toUpperCase();
+    const path = match[2];
+    endpoints.push({
+      method,
+      path,
+      file,
+      line,
+      source: 'flask',
+    });
+  }
+
+  return endpoints;
+}
+
+/**
+ * Parse Django REST Framework viewsets and views.
+ * @param content - The file content to parse.
+ * @param file - The file path.
+ * @returns Parsed API endpoints.
+ */
+function parseDjangoRoutes(content: string, file: string): ApiEndpoint[] {
+  const endpoints: ApiEndpoint[] = [];
+
+  // Django REST Framework ViewSet with router
+  if (/class\s+\w+ViewSet/.test(content) || /from\s+rest_framework/.test(content)) {
+    const viewsetMatch = content.match(/class\s+(\w+ViewSet)/);
+    if (viewsetMatch) {
+      // Common ViewSet actions
+      const actions = ['list', 'create', 'retrieve', 'update', 'partial_update', 'destroy'];
+      for (const action of actions) {
+        if (new RegExp(`def\\s+${action}`).test(content)) {
+          endpoints.push({
+            method:
+              action === 'list' || action === 'retrieve'
+                ? 'GET'
+                : action === 'create'
+                  ? 'POST'
+                  : action === 'destroy'
+                    ? 'DELETE'
+                    : 'PUT',
+            path: `/${action}`,
+            file,
+            line: 0,
+            source: 'django',
+          });
+        }
+      }
+    }
+  }
+
+  // Django function-based views with decorators
+  const decoratorRegex = /@(?:api_view|action)\s*\([^)]*\)\s*(?:@\w+\s*\([^)]*\)\s*)*def\s+(\w+)\s*\(/gi;
+  let match;
+  while ((match = decoratorRegex.exec(content)) !== null) {
+    const line = content.substring(0, match.index).split('\n').length;
+    endpoints.push({
+      method: 'GET',
+      path: `/${match[1]}`,
+      file,
+      line,
+      source: 'django',
+    });
+  }
+
+  return endpoints;
+}
+
+/**
+ * Parse Rails routes.rb file.
+ * @param content - The file content to parse.
+ * @param file - The file path.
+ * @returns Parsed API endpoints.
+ */
+function parseRailsRoutes(content: string, file: string): ApiEndpoint[] {
+  const endpoints: ApiEndpoint[] = [];
+  // Rails route syntax: get '/users', to: 'users#index'
+  const routeRegex = /(get|post|put|patch|delete|resources?)\s+['"]([^'"]+)['"]/gi;
+  let match;
+
+  while ((match = routeRegex.exec(content)) !== null) {
+    const line = content.substring(0, match.index).split('\n').length;
+    const method = match[1].toUpperCase();
+    const path = match[2];
+
+    if (method === 'RESOURCES' || method === 'RESOURCE') {
+      // RESTful resource routes
+      const resourceName = path.replace(/^\//, '').replace(/\/$/, '');
+      endpoints.push(
+        { method: 'GET', path: `/${resourceName}`, file, line, source: 'rails' },
+        { method: 'POST', path: `/${resourceName}`, file, line, source: 'rails' },
+        { method: 'GET', path: `/${resourceName}/:id`, file, line, source: 'rails' },
+        { method: 'PUT', path: `/${resourceName}/:id`, file, line, source: 'rails' },
+        { method: 'DELETE', path: `/${resourceName}/:id`, file, line, source: 'rails' },
+      );
+    } else {
+      endpoints.push({
+        method: method === 'PATCH' ? 'PUT' : method,
+        path,
+        file,
+        line,
+        source: 'rails',
+      });
+    }
+  }
+
+  return endpoints;
+}
+
+/**
+ * Parse Sinatra routes.
+ * @param content - The file content to parse.
+ * @param file - The file path.
+ * @returns Parsed API endpoints.
+ */
+function parseSinatraRoutes(content: string, file: string): ApiEndpoint[] {
+  const endpoints: ApiEndpoint[] = [];
+  const routeRegex = /(get|post|put|delete|patch)\s+['"]([^'"]+)['"]/gi;
+  let match;
+
+  while ((match = routeRegex.exec(content)) !== null) {
+    const line = content.substring(0, match.index).split('\n').length;
+    endpoints.push({
+      method: match[1].toUpperCase(),
+      path: match[2],
+      file,
+      line,
+      source: 'sinatra',
+    });
+  }
+
+  return endpoints;
+}
+
+/**
+ * Parse Laravel routes.
+ * @param content - The file content to parse.
+ * @param file - The file path.
+ * @returns Parsed API endpoints.
+ */
+function parseLaravelRoutes(content: string, file: string): ApiEndpoint[] {
+  const endpoints: ApiEndpoint[] = [];
+  // Laravel route syntax: Route::get('/users', [UserController::class, 'index']);
+  const routeRegex = /Route::(get|post|put|delete|patch|any|match)\s*\(\s*['"]([^'"]+)['"]/gi;
+  let match;
+
+  while ((match = routeRegex.exec(content)) !== null) {
+    const line = content.substring(0, match.index).split('\n').length;
+    const method = match[1].toUpperCase();
+    endpoints.push({
+      method: method === 'ANY' || method === 'MATCH' ? 'ANY' : method,
+      path: match[2],
+      file,
+      line,
+      source: 'laravel',
+    });
+  }
+
+  // Laravel resource routes: Route::resource('users', UserController::class);
+  const resourceRegex = /Route::resource\s*\(\s*['"]([^'"]+)['"]/gi;
+  while ((match = resourceRegex.exec(content)) !== null) {
+    const line = content.substring(0, match.index).split('\n').length;
+    const resourceName = match[1];
+    endpoints.push(
+      { method: 'GET', path: `/${resourceName}`, file, line, source: 'laravel' },
+      { method: 'POST', path: `/${resourceName}`, file, line, source: 'laravel' },
+      { method: 'GET', path: `/${resourceName}/{id}`, file, line, source: 'laravel' },
+      { method: 'PUT', path: `/${resourceName}/{id}`, file, line, source: 'laravel' },
+      { method: 'DELETE', path: `/${resourceName}/{id}`, file, line, source: 'laravel' },
+    );
+  }
+
+  return endpoints;
+}
+
+/**
+ * Parse Spring Boot @RequestMapping annotations.
+ * @param content - The file content to parse.
+ * @param file - The file path.
+ * @returns Parsed API endpoints.
+ */
+function parseSpringRoutes(content: string, file: string): ApiEndpoint[] {
+  const endpoints: ApiEndpoint[] = [];
+  if (!/@(?:RestController|Controller)/.test(content)) return endpoints;
+
+  const classPath =
+    content.match(
+      /@(?:RequestMapping|GetMapping|PostMapping|PutMapping|DeleteMapping|PatchMapping)\s*\(\s*value\s*=\s*['"]([^'"]+)['"]/,
+    )?.[1] ||
+    content.match(/@RequestMapping\s*\(\s*['"]([^'"]+)['"]/)?.[1] ||
+    '';
+
+  const methodRegex =
+    /@(?:GetMapping|PostMapping|PutMapping|DeleteMapping|PatchMapping|RequestMapping)\s*\(\s*(?:value\s*=\s*)?['"]([^'"]*)['"]/gi;
+  let match;
+
+  while ((match = methodRegex.exec(content)) !== null) {
+    const line = content.substring(0, match.index).split('\n').length;
+    const methodPath = match[1];
+    const fullAnnotation = content.substring(match.index, content.indexOf(')', match.index) + 1);
+    let method = 'GET';
+    if (/GetMapping/.test(fullAnnotation)) method = 'GET';
+    else if (/PostMapping/.test(fullAnnotation)) method = 'POST';
+    else if (/PutMapping/.test(fullAnnotation)) method = 'PUT';
+    else if (/DeleteMapping/.test(fullAnnotation)) method = 'DELETE';
+    else if (/PatchMapping/.test(fullAnnotation)) method = 'PATCH';
+    else if (/RequestMapping/.test(fullAnnotation)) {
+      const methodMatch = fullAnnotation.match(/method\s*=\s*RequestMethod\.(\w+)/);
+      if (methodMatch) method = methodMatch[1].toUpperCase();
+    }
+
+    endpoints.push({
+      method,
+      path: `/${classPath}/${methodPath}`.replace(/\/+/g, '/'),
+      file,
+      line,
+      source: 'spring',
+    });
+  }
+
+  return endpoints;
+}
+
+/**
+ * Parse JAX-RS annotations.
+ * @param content - The file content to parse.
+ * @param file - The file path.
+ * @returns Parsed API endpoints.
+ */
+function parseJAXRSRoutes(content: string, file: string): ApiEndpoint[] {
+  const endpoints: ApiEndpoint[] = [];
+  if (!/@Path/.test(content)) return endpoints;
+
+  const classPath = content.match(/@Path\s*\(\s*['"]([^'"]+)['"]/)?.[1] || '';
+  const methodRegex = /@(GET|POST|PUT|DELETE|PATCH|Path)\s*\(\s*(?:value\s*=\s*)?['"]([^'"]*)['"]/gi;
+  let match;
+
+  while ((match = methodRegex.exec(content)) !== null) {
+    const line = content.substring(0, match.index).split('\n').length;
+    const annotation = match[1];
+    const path = match[2] || '';
+    let method = 'GET';
+    if (annotation === 'GET') method = 'GET';
+    else if (annotation === 'POST') method = 'POST';
+    else if (annotation === 'PUT') method = 'PUT';
+    else if (annotation === 'DELETE') method = 'DELETE';
+    else if (annotation === 'PATCH') method = 'PATCH';
+
+    endpoints.push({
+      method,
+      path: `/${classPath}/${path}`.replace(/\/+/g, '/'),
+      file,
+      line,
+      source: 'jaxrs',
+    });
+  }
+
+  return endpoints;
+}
+
+/**
+ * Parse Go Gin routes.
+ * @param content - The file content to parse.
+ * @param file - The file path.
+ * @returns Parsed API endpoints.
+ */
+function parseGinRoutes(content: string, file: string): ApiEndpoint[] {
+  const endpoints: ApiEndpoint[] = [];
+  const routeRegex = /(?:router|r|engine)\.(GET|POST|PUT|DELETE|PATCH|Any)\s*\(\s*['"]([^'"]+)['"]/gi;
+  let match;
+
+  while ((match = routeRegex.exec(content)) !== null) {
+    const line = content.substring(0, match.index).split('\n').length;
+    endpoints.push({
+      method: match[1] === 'Any' ? 'ANY' : match[1],
+      path: match[2],
+      file,
+      line,
+      source: 'gin',
+    });
+  }
+
+  return endpoints;
+}
+
+/**
+ * Parse Go Echo routes.
+ * @param content - The file content to parse.
+ * @param file - The file path.
+ * @returns Parsed API endpoints.
+ */
+function parseEchoRoutes(content: string, file: string): ApiEndpoint[] {
+  const endpoints: ApiEndpoint[] = [];
+  const routeRegex = /(?:e|app|router)\.(GET|POST|PUT|DELETE|PATCH|Any)\s*\(\s*['"]([^'"]+)['"]/gi;
+  let match;
+
+  while ((match = routeRegex.exec(content)) !== null) {
+    const line = content.substring(0, match.index).split('\n').length;
+    endpoints.push({
+      method: match[1] === 'Any' ? 'ANY' : match[1],
+      path: match[2],
+      file,
+      line,
+      source: 'echo',
+    });
+  }
+
+  return endpoints;
+}
+
+/**
+ * Parse Go Fiber routes.
+ * @param content - The file content to parse.
+ * @param file - The file path.
+ * @returns Parsed API endpoints.
+ */
+function parseFiberRoutes(content: string, file: string): ApiEndpoint[] {
+  const endpoints: ApiEndpoint[] = [];
+  const routeRegex = /(?:app|router)\.(Get|Post|Put|Delete|Patch|All)\s*\(\s*['"]([^'"]+)['"]/gi;
+  let match;
+
+  while ((match = routeRegex.exec(content)) !== null) {
+    const line = content.substring(0, match.index).split('\n').length;
+    endpoints.push({
+      method: match[1] === 'All' ? 'ANY' : match[1].toUpperCase(),
+      path: match[2],
+      file,
+      line,
+      source: 'fiber',
+    });
+  }
+
+  return endpoints;
+}
+
+/**
+ * Parse Go Chi routes.
+ * @param content - The file content to parse.
+ * @param file - The file path.
+ * @returns Parsed API endpoints.
+ */
+function parseChiRoutes(content: string, file: string): ApiEndpoint[] {
+  const endpoints: ApiEndpoint[] = [];
+  const routeRegex = /(?:r|router|mux)\.(Get|Post|Put|Delete|Patch|Method)\s*\(\s*['"]([^'"]+)['"]/gi;
+  let match;
+
+  while ((match = routeRegex.exec(content)) !== null) {
+    const line = content.substring(0, match.index).split('\n').length;
+    endpoints.push({
+      method: match[1] === 'Method' ? 'ANY' : match[1].toUpperCase(),
+      path: match[2],
+      file,
+      line,
+      source: 'chi',
+    });
+  }
+
+  return endpoints;
+}
+
+/**
+ * Parse Rust Actix-web routes.
+ * @param content - The file content to parse.
+ * @param file - The file path.
+ * @returns Parsed API endpoints.
+ */
+function parseActixRoutes(content: string, file: string): ApiEndpoint[] {
+  const endpoints: ApiEndpoint[] = [];
+  const routeRegex = /\.(route|get|post|put|delete)\s*\(\s*['"]([^'"]+)['"]/gi;
+  let match;
+
+  while ((match = routeRegex.exec(content)) !== null) {
+    const line = content.substring(0, match.index).split('\n').length;
+    const method = match[1].toUpperCase() === 'ROUTE' ? 'GET' : match[1].toUpperCase();
+    endpoints.push({
+      method,
+      path: match[2],
+      file,
+      line,
+      source: 'actix',
+    });
+  }
+
+  return endpoints;
+}
+
+/**
+ * Parse Rust Rocket routes.
+ * @param content - The file content to parse.
+ * @param file - The file path.
+ * @returns Parsed API endpoints.
+ */
+function parseRocketRoutes(content: string, file: string): ApiEndpoint[] {
+  const endpoints: ApiEndpoint[] = [];
+  const routeRegex = /#\[(get|post|put|delete|patch|head|options)\s*\(['"]([^'"]+)['"]/gi;
+  let match;
+
+  while ((match = routeRegex.exec(content)) !== null) {
+    const line = content.substring(0, match.index).split('\n').length;
+    endpoints.push({
+      method: match[1].toUpperCase(),
+      path: match[2],
+      file,
+      line,
+      source: 'rocket',
+    });
+  }
+
+  return endpoints;
+}
+
+/**
+ * Parse Rust Axum routes.
+ * @param content - The file content to parse.
+ * @param file - The file path.
+ * @returns Parsed API endpoints.
+ */
+function parseAxumRoutes(content: string, file: string): ApiEndpoint[] {
+  const endpoints: ApiEndpoint[] = [];
+  const routeRegex = /\.(route|get|post|put|delete|patch)\s*\(\s*['"]([^'"]+)['"]/gi;
+  let match;
+
+  while ((match = routeRegex.exec(content)) !== null) {
+    const line = content.substring(0, match.index).split('\n').length;
+    const method = match[1].toUpperCase() === 'ROUTE' ? 'GET' : match[1].toUpperCase();
+    endpoints.push({
+      method,
+      path: match[2],
+      file,
+      line,
+      source: 'axum',
+    });
+  }
+
+  return endpoints;
+}
+
+/**
+ * Parse ASP.NET Core controllers.
+ * @param content - The file content to parse.
+ * @param file - The file path.
+ * @returns Parsed API endpoints.
+ */
+function parseAspNetRoutes(content: string, file: string): ApiEndpoint[] {
+  const endpoints: ApiEndpoint[] = [];
+  if (!/\[ApiController\]/.test(content) && !/class\s+\w+Controller/.test(content)) return endpoints;
+
+  const routePrefix = content.match(/\[Route\s*\(\s*['"]([^'"]+)['"]/)?.[1] || '';
+  const methodRegex = /\[(HttpGet|HttpPost|HttpPut|HttpDelete|HttpPatch)\s*(?:\(\s*['"]([^'"]*)['"]\s*)?\)\]/gi;
+  let match;
+
+  while ((match = methodRegex.exec(content)) !== null) {
+    const line = content.substring(0, match.index).split('\n').length;
+    const method = match[1].replace('Http', '').toUpperCase();
+    const path = match[2] || '';
+    endpoints.push({
+      method,
+      path: `/${routePrefix}/${path}`.replace(/\/+/g, '/'),
+      file,
+      line,
+      source: 'aspnet',
+    });
+  }
+
+  return endpoints;
+}
+
+/**
+ * Parse Koa routes.
+ * @param content - The file content to parse.
+ * @param file - The file path.
+ * @returns Parsed API endpoints.
+ */
+function parseKoaRoutes(content: string, file: string): ApiEndpoint[] {
+  const endpoints: ApiEndpoint[] = [];
+  const routeRegex = /(?:router|app)\.(get|post|put|delete|patch|all)\s*\(\s*['"]([^'"]+)['"]/gi;
+  let match;
+
+  while ((match = routeRegex.exec(content)) !== null) {
+    const line = content.substring(0, match.index).split('\n').length;
+    endpoints.push({
+      method: match[1].toUpperCase() === 'ALL' ? 'ANY' : match[1].toUpperCase(),
+      path: match[2],
+      file,
+      line,
+      source: 'koa',
+    });
+  }
+
+  return endpoints;
+}
+
+/**
+ * Parse Fastify routes.
+ * @param content - The file content to parse.
+ * @param file - The file path.
+ * @returns Parsed API endpoints.
+ */
+function parseFastifyRoutes(content: string, file: string): ApiEndpoint[] {
+  const endpoints: ApiEndpoint[] = [];
+  const routeRegex = /(?:fastify|app)\.(get|post|put|delete|patch)\s*\(\s*['"]([^'"]+)['"]/gi;
+  let match;
+
+  while ((match = routeRegex.exec(content)) !== null) {
+    const line = content.substring(0, match.index).split('\n').length;
+    endpoints.push({
+      method: match[1].toUpperCase(),
+      path: match[2],
+      file,
+      line,
+      source: 'fastify',
+    });
+  }
+
+  return endpoints;
+}
+
+/**
+ * Parse Hapi routes.
+ * @param content - The file content to parse.
+ * @param file - The file path.
+ * @returns Parsed API endpoints.
+ */
+function parseHapiRoutes(content: string, file: string): ApiEndpoint[] {
+  const endpoints: ApiEndpoint[] = [];
+  const routeRegex =
+    /(?:method|path):\s*['"](GET|POST|PUT|DELETE|PATCH|get|post|put|delete|patch)['"]|path:\s*['"]([^'"]+)['"]/gi;
+  let match;
+  let currentMethod = 'GET';
+  let currentPath = '';
+
+  while ((match = routeRegex.exec(content)) !== null) {
+    const line = content.substring(0, match.index).split('\n').length;
+    if (match[1]) {
+      currentMethod = match[1].toUpperCase();
+    } else if (match[2]) {
+      currentPath = match[2];
+      endpoints.push({
+        method: currentMethod,
+        path: currentPath,
+        file,
+        line,
+        source: 'hapi',
+      });
+    }
+  }
+
+  return endpoints;
+}
+
+/**
  * Main API contract analysis function.
  * @param cwd - The working directory to scan.
  * @returns The API contract analysis result.
@@ -344,6 +938,12 @@ export async function analyzeApiContracts(cwd: string): Promise<ApiContractResul
   const gqlFiles = await listFiles(cwd, { glob: '**/*.{graphql,gql}' });
   const tsFiles = await listFiles(cwd, { glob: '**/*.{ts,tsx,js,jsx}' });
   const pyFiles = await listFiles(cwd, { glob: '**/*.py' });
+  const rbFiles = await listFiles(cwd, { glob: '**/*.rb' });
+  const phpFiles = await listFiles(cwd, { glob: '**/*.php' });
+  const javaFiles = await listFiles(cwd, { glob: '**/*.java' });
+  const goFiles = await listFiles(cwd, { glob: '**/*.go' });
+  const rsFiles = await listFiles(cwd, { glob: '**/*.rs' });
+  const csFiles = await listFiles(cwd, { glob: '**/*.cs' });
 
   // OpenAPI specs
   for (const f of jsonFiles.filter((f) => /swagger|openapi/i.test(f)).slice(0, 10)) {
@@ -376,17 +976,16 @@ export async function analyzeApiContracts(cwd: string): Promise<ApiContractResul
   }
 
   // Express/NestJS routes - prioritize route files
-  const routeFiles = tsFiles.filter((f) => 
-    /routes?|controllers?|api|endpoints?/i.test(f) || 
-    /\.route\.(ts|js)$/i.test(f)
+  const routeFiles = tsFiles.filter(
+    (f) => /routes?|controllers?|api|endpoints?/i.test(f) || /\.route\.(ts|js)$/i.test(f),
   );
   const otherTsFiles = tsFiles.filter((f) => !routeFiles.includes(f));
-  
+
   // Check route files first (more likely to contain routes)
   for (const f of [...routeFiles, ...otherTsFiles].slice(0, 500)) {
     try {
       const content = await readFile(path.join(cwd, f), 'utf-8');
-      
+
       // Enhanced Express detection - check for multiple patterns
       if (
         /(?:app|router|express\.Router)\.(get|post|put|delete|patch|all|use|route)\s*\(/i.test(content) ||
@@ -401,7 +1000,7 @@ export async function analyzeApiContracts(cwd: string): Promise<ApiContractResul
           sources.add('express');
         }
       }
-      
+
       // NestJS detection
       if (/@Controller/.test(content)) {
         const eps = parseNestJSRoutes(content, f);
@@ -411,16 +1010,51 @@ export async function analyzeApiContracts(cwd: string): Promise<ApiContractResul
           sources.add('nestjs');
         }
       }
+
+      // Koa detection
+      if (/from\s+['"]koa['"]|require\s*\(['"]koa['"]/.test(content) || /router\.(get|post|put|delete)/.test(content)) {
+        const eps = parseKoaRoutes(content, f);
+        if (eps.length > 0) {
+          allEndpoints.push(...eps);
+          specFiles.push(f);
+          sources.add('koa');
+        }
+      }
+
+      // Fastify detection
+      if (
+        /from\s+['"]fastify['"]|require\s*\(['"]fastify['"]/.test(content) ||
+        /fastify\.(get|post|put|delete)/.test(content)
+      ) {
+        const eps = parseFastifyRoutes(content, f);
+        if (eps.length > 0) {
+          allEndpoints.push(...eps);
+          specFiles.push(f);
+          sources.add('fastify');
+        }
+      }
+
+      // Hapi detection
+      if (/from\s+['"]@hapi\/hapi['"]|require\s*\(['"]@hapi\/hapi['"]/.test(content) || /server\.route/.test(content)) {
+        const eps = parseHapiRoutes(content, f);
+        if (eps.length > 0) {
+          allEndpoints.push(...eps);
+          specFiles.push(f);
+          sources.add('hapi');
+        }
+      }
     } catch (error) {
       logger.debug(`Failed to parse possible route file: ${f}`, { error });
     }
   }
 
-  // FastAPI routes
-  for (const f of pyFiles.slice(0, 200)) {
+  // Python frameworks: FastAPI, Flask, Django
+  for (const f of pyFiles.slice(0, 300)) {
     try {
       const content = await readFile(path.join(cwd, f), 'utf-8');
-      if (/@(?:app|router)\.(get|post|put|delete)/.test(content)) {
+
+      // FastAPI routes
+      if (/@(?:app|router)\.(get|post|put|delete)/.test(content) || /from\s+fastapi/.test(content)) {
         const eps = parseFastAPIRoutes(content, f);
         if (eps.length > 0) {
           allEndpoints.push(...eps);
@@ -428,8 +1062,214 @@ export async function analyzeApiContracts(cwd: string): Promise<ApiContractResul
           sources.add('fastapi');
         }
       }
+
+      // Flask routes
+      if (
+        /@(?:app|blueprint|router)\.(route|get|post|put|delete|patch)/.test(content) ||
+        /from\s+flask/.test(content)
+      ) {
+        const eps = parseFlaskRoutes(content, f);
+        if (eps.length > 0) {
+          allEndpoints.push(...eps);
+          specFiles.push(f);
+          sources.add('flask');
+        }
+      }
+
+      // Django REST Framework
+      if (/from\s+rest_framework/.test(content) || /class\s+\w+ViewSet/.test(content)) {
+        const eps = parseDjangoRoutes(content, f);
+        if (eps.length > 0) {
+          allEndpoints.push(...eps);
+          specFiles.push(f);
+          sources.add('django');
+        }
+      }
     } catch (error) {
-      logger.debug(`Failed to parse possible OpenAPI spec: ${f}`, { error });
+      logger.debug(`Failed to parse possible Python route file: ${f}`, { error });
+    }
+  }
+
+  // Ruby frameworks: Rails, Sinatra
+  const railsRouteFiles = rbFiles.filter((f) => /routes\.rb|config\/routes/.test(f));
+  const otherRbFiles = rbFiles.filter((f) => !railsRouteFiles.includes(f));
+
+  for (const f of [...railsRouteFiles, ...otherRbFiles].slice(0, 100)) {
+    try {
+      const content = await readFile(path.join(cwd, f), 'utf-8');
+
+      // Rails routes
+      if (/Rails\.application\.routes\.draw|resources?|get\s+['"]/.test(content)) {
+        const eps = parseRailsRoutes(content, f);
+        if (eps.length > 0) {
+          allEndpoints.push(...eps);
+          specFiles.push(f);
+          sources.add('rails');
+        }
+      }
+
+      // Sinatra routes
+      if (/require\s+['"]sinatra['"]|class\s+\w+\s*<\s*Sinatra/.test(content)) {
+        const eps = parseSinatraRoutes(content, f);
+        if (eps.length > 0) {
+          allEndpoints.push(...eps);
+          specFiles.push(f);
+          sources.add('sinatra');
+        }
+      }
+    } catch (error) {
+      logger.debug(`Failed to parse possible Ruby route file: ${f}`, { error });
+    }
+  }
+
+  // PHP frameworks: Laravel
+  for (const f of phpFiles.filter((f) => /routes|Route::/.test(f)).slice(0, 50)) {
+    try {
+      const content = await readFile(path.join(cwd, f), 'utf-8');
+      if (/Route::(get|post|put|delete|resource)/.test(content)) {
+        const eps = parseLaravelRoutes(content, f);
+        if (eps.length > 0) {
+          allEndpoints.push(...eps);
+          specFiles.push(f);
+          sources.add('laravel');
+        }
+      }
+    } catch (error) {
+      logger.debug(`Failed to parse possible Laravel route file: ${f}`, { error });
+    }
+  }
+
+  // Java frameworks: Spring Boot, JAX-RS
+  for (const f of javaFiles.filter((f) => /controller|Controller|RestController|@Path/.test(f)).slice(0, 200)) {
+    try {
+      const content = await readFile(path.join(cwd, f), 'utf-8');
+
+      // Spring Boot
+      if (/@(?:RestController|Controller)/.test(content)) {
+        const eps = parseSpringRoutes(content, f);
+        if (eps.length > 0) {
+          allEndpoints.push(...eps);
+          specFiles.push(f);
+          sources.add('spring');
+        }
+      }
+
+      // JAX-RS
+      if (/@Path/.test(content) && /javax\.ws\.rs|jakarta\.ws\.rs/.test(content)) {
+        const eps = parseJAXRSRoutes(content, f);
+        if (eps.length > 0) {
+          allEndpoints.push(...eps);
+          specFiles.push(f);
+          sources.add('jaxrs');
+        }
+      }
+    } catch (error) {
+      logger.debug(`Failed to parse possible Java route file: ${f}`, { error });
+    }
+  }
+
+  // Go frameworks: Gin, Echo, Fiber, Chi
+  for (const f of goFiles.filter((f) => /routes?|handlers?|api/.test(f) || !/test/.test(f)).slice(0, 200)) {
+    try {
+      const content = await readFile(path.join(cwd, f), 'utf-8');
+
+      // Gin
+      if (/github\.com\/gin-gonic\/gin/.test(content) || /router\.(GET|POST|PUT|DELETE)/.test(content)) {
+        const eps = parseGinRoutes(content, f);
+        if (eps.length > 0) {
+          allEndpoints.push(...eps);
+          specFiles.push(f);
+          sources.add('gin');
+        }
+      }
+
+      // Echo
+      if (/github\.com\/labstack\/echo/.test(content) || /e\.(GET|POST|PUT|DELETE)/.test(content)) {
+        const eps = parseEchoRoutes(content, f);
+        if (eps.length > 0) {
+          allEndpoints.push(...eps);
+          specFiles.push(f);
+          sources.add('echo');
+        }
+      }
+
+      // Fiber
+      if (/github\.com\/gofiber\/fiber/.test(content) || /app\.(Get|Post|Put|Delete)/.test(content)) {
+        const eps = parseFiberRoutes(content, f);
+        if (eps.length > 0) {
+          allEndpoints.push(...eps);
+          specFiles.push(f);
+          sources.add('fiber');
+        }
+      }
+
+      // Chi
+      if (/github\.com\/go-chi\/chi/.test(content) || /r\.(Get|Post|Put|Delete)/.test(content)) {
+        const eps = parseChiRoutes(content, f);
+        if (eps.length > 0) {
+          allEndpoints.push(...eps);
+          specFiles.push(f);
+          sources.add('chi');
+        }
+      }
+    } catch (error) {
+      logger.debug(`Failed to parse possible Go route file: ${f}`, { error });
+    }
+  }
+
+  // Rust frameworks: Actix-web, Rocket, Axum
+  for (const f of rsFiles.filter((f) => /routes?|handlers?|api|main/.test(f) || !/test/.test(f)).slice(0, 200)) {
+    try {
+      const content = await readFile(path.join(cwd, f), 'utf-8');
+
+      // Actix-web
+      if (/actix_web/.test(content) || /\.route\(/.test(content)) {
+        const eps = parseActixRoutes(content, f);
+        if (eps.length > 0) {
+          allEndpoints.push(...eps);
+          specFiles.push(f);
+          sources.add('actix');
+        }
+      }
+
+      // Rocket
+      if (/rocket/.test(content) || /#\[(get|post|put|delete)/.test(content)) {
+        const eps = parseRocketRoutes(content, f);
+        if (eps.length > 0) {
+          allEndpoints.push(...eps);
+          specFiles.push(f);
+          sources.add('rocket');
+        }
+      }
+
+      // Axum
+      if (/axum/.test(content) || /Router::new/.test(content)) {
+        const eps = parseAxumRoutes(content, f);
+        if (eps.length > 0) {
+          allEndpoints.push(...eps);
+          specFiles.push(f);
+          sources.add('axum');
+        }
+      }
+    } catch (error) {
+      logger.debug(`Failed to parse possible Rust route file: ${f}`, { error });
+    }
+  }
+
+  // C# frameworks: ASP.NET Core
+  for (const f of csFiles.filter((f) => /controller|Controller/.test(f)).slice(0, 200)) {
+    try {
+      const content = await readFile(path.join(cwd, f), 'utf-8');
+      if (/\[ApiController\]|class\s+\w+Controller/.test(content)) {
+        const eps = parseAspNetRoutes(content, f);
+        if (eps.length > 0) {
+          allEndpoints.push(...eps);
+          specFiles.push(f);
+          sources.add('aspnet');
+        }
+      }
+    } catch (error) {
+      logger.debug(`Failed to parse possible C# route file: ${f}`, { error });
     }
   }
 
@@ -466,8 +1306,14 @@ export async function analyzeApiContracts(cwd: string): Promise<ApiContractResul
     '**/*.{json,yaml,yml} (OpenAPI/Swagger containing swagger|openapi)',
     '**/*.{graphql,gql} (GraphQL schemas)',
     '**/routes/**/*.{ts,tsx,js,jsx} (Express route files - prioritized)',
-    '**/*.{ts,tsx,js,jsx} (Express/NestJS routes: router.get/post, router.route(), express.Router())',
-    '**/*.py (FastAPI routes with @app.get/post)',
+    '**/*.{ts,tsx,js,jsx} (Express/NestJS/Koa/Fastify/Hapi routes)',
+    '**/*.py (FastAPI/Flask/Django REST Framework routes)',
+    '**/*.rb (Rails routes.rb, Sinatra routes)',
+    '**/*.php (Laravel Route::get/post/resource)',
+    '**/*.java (Spring Boot @RequestMapping, JAX-RS @Path)',
+    '**/*.go (Gin/Echo/Fiber/Chi routes)',
+    '**/*.rs (Actix-web/Rocket/Axum routes)',
+    '**/*.cs (ASP.NET Core [ApiController])',
   ];
 
   return {
