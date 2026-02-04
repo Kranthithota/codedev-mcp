@@ -30,11 +30,12 @@ export interface TypeFlowResult {
 }
 
 /**
- *
- * @param cwd
- * @param typeName
- * @param options
- * @param options.directory
+ * Analyze where a type is defined, imported, and used across the codebase.
+ * @param cwd - The working directory
+ * @param typeName - Name of the type to trace
+ * @param options - Analysis options
+ * @param options.directory - Subdirectory to scan
+ * @returns Type flow analysis with usages and summary
  */
 export async function analyzeTypeFlow(
   cwd: string,

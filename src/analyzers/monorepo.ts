@@ -7,33 +7,30 @@
 import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { listFiles } from '../search/fast-search.js';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import path from 'node:path';
 import { logger } from '../utils/logger.js';
-
-const exec = promisify(execFile);
 
 export interface WorkspacePackage {
   name: string;
   path: string;
   version?: string;
   private?: boolean;
-  dependencies: string[]; // other workspace packages this depends on
+  /** Other workspace packages this depends on */
+  dependencies: string[];
   scripts?: string[];
 }
 
 export interface MonorepoResult {
   type:
-  | 'npm-workspaces'
-  | 'yarn-workspaces'
-  | 'pnpm-workspaces'
-  | 'cargo-workspaces'
-  | 'python-monorepo'
-  | 'lerna'
-  | 'nx'
-  | 'turborepo'
-  | 'none';
+    | 'npm-workspaces'
+    | 'yarn-workspaces'
+    | 'pnpm-workspaces'
+    | 'cargo-workspaces'
+    | 'python-monorepo'
+    | 'lerna'
+    | 'nx'
+    | 'turborepo'
+    | 'none';
   rootPath: string;
   packages: WorkspacePackage[];
   dependencyGraph: { from: string; to: string }[];
@@ -42,8 +39,9 @@ export interface MonorepoResult {
 }
 
 /**
- *
- * @param cwd
+ * Analyze monorepo workspace structure, dependencies, and issues.
+ * @param cwd - The root directory of the monorepo
+ * @returns Monorepo analysis results with packages, dependency graph, and issues
  */
 export async function analyzeMonorepo(cwd: string): Promise<MonorepoResult> {
   const packages: WorkspacePackage[] = [];
@@ -98,7 +96,6 @@ export async function analyzeMonorepo(cwd: string): Promise<MonorepoResult> {
   // 4. Discover workspace packages (JS/TS)
   if (workspaceGlobs.length > 0) {
     for (const glob of workspaceGlobs) {
-      const pattern = glob.replace(/\*/g, '') + '/package.json';
       const pkgFiles = await listFiles(cwd, { glob: `${glob}/package.json` }).catch(() => [] as string[]);
       for (const pkgFile of pkgFiles) {
         try {

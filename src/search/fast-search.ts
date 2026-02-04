@@ -72,7 +72,6 @@ export function resetRgAvailability(): void {
   _rgAvailable = null;
 }
 
-
 /**
  * Primary search function that delegates to ripgrep if available, otherwise falls back to grep.
  *

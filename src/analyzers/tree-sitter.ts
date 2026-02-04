@@ -9,10 +9,33 @@
 import path from 'node:path';
 import { readFile } from 'node:fs/promises';
 
+/** Minimal interface for tree-sitter AST nodes. */
+interface TreeSitterNode {
+  type: string;
+  text: string;
+  startPosition: { row: number; column: number };
+  endPosition: { row: number; column: number };
+  startIndex: number;
+  children: TreeSitterNode[] | null;
+  previousNamedSibling: TreeSitterNode | null;
+  childForFieldName?: (name: string) => TreeSitterNode | null;
+}
+
+/** Minimal interface for tree-sitter parser constructor. */
+interface TreeSitterParserClass {
+  init: () => Promise<void>;
+  Language: { load: (path: string) => Promise<unknown> };
+  new (): {
+    setLanguage: (lang: unknown) => void;
+    parse: (content: string) => { rootNode: TreeSitterNode; delete: () => void };
+    delete: () => void;
+  };
+}
+
 // Dynamic import for web-tree-sitter (may not be available)
-let Parser: any = null;
+let Parser: TreeSitterParserClass | null = null;
 let treeSitterReady = false;
-const loadedLanguages = new Map<string, any>();
+const loadedLanguages = new Map<string, unknown>();
 
 // Grammar file locations (downloaded on first use)
 const GRAMMAR_URLS: Record<string, string> = {
@@ -35,7 +58,8 @@ export interface ASTSymbol {
   params?: string[];
   returnType?: string;
   docComment?: string;
-  children?: ASTSymbol[]; // Methods inside classes, etc.
+  /** Methods inside classes, etc. */
+  children?: ASTSymbol[];
 }
 
 export interface CallGraphEntry {
@@ -56,11 +80,14 @@ export interface ScopeInfo {
 
 /**
  * Initialize tree-sitter. Call once at startup.
+ * @returns True if initialization succeeded
  */
 export async function initTreeSitter(): Promise<boolean> {
   try {
     const TreeSitter = await import('web-tree-sitter');
-    Parser = TreeSitter.default || TreeSitter;
+    const TreeSitterModule = TreeSitter.default || TreeSitter;
+    // Type assertion needed because web-tree-sitter types don't match our interface exactly
+    Parser = TreeSitterModule as unknown as TreeSitterParserClass;
     await Parser.init();
     treeSitterReady = true;
     return true;
@@ -72,6 +99,7 @@ export async function initTreeSitter(): Promise<boolean> {
 
 /**
  * Check if tree-sitter is available and ready.
+ * @returns True if tree-sitter has been initialized
  */
 export function isTreeSitterReady(): boolean {
   return treeSitterReady;
@@ -79,6 +107,7 @@ export function isTreeSitterReady(): boolean {
 
 /**
  * Get supported languages for tree-sitter.
+ * @returns Array of supported language names
  */
 export function getTreeSitterLanguages(): string[] {
   return Object.keys(GRAMMAR_URLS);
@@ -86,9 +115,10 @@ export function getTreeSitterLanguages(): string[] {
 
 /**
  * Load a language grammar. Returns null if not available.
- * @param language
+ * @param language - The language name to load
+ * @returns The loaded language grammar or null
  */
-async function loadLanguage(language: string): Promise<any | null> {
+async function loadLanguage(language: string): Promise<unknown | null> {
   if (!treeSitterReady || !Parser) return null;
   if (loadedLanguages.has(language)) return loadedLanguages.get(language);
 
@@ -122,8 +152,9 @@ async function loadLanguage(language: string): Promise<any | null> {
 /**
  * Parse a file into an AST and extract symbols.
  * Falls back to null if tree-sitter isn't available for this language.
- * @param filePath
- * @param language
+ * @param filePath - Path to the source file
+ * @param language - The programming language
+ * @returns Array of AST symbols or null if parsing unavailable
  */
 export async function parseAST(filePath: string, language: string): Promise<ASTSymbol[] | null> {
   const lang = await loadLanguage(language);
@@ -149,14 +180,21 @@ export async function parseAST(filePath: string, language: string): Promise<ASTS
 
 /**
  * Recursively extract symbols from AST nodes.
- * @param node
- * @param symbols
- * @param source
- * @param language
- * @param depth
+ * @param node - The current AST node
+ * @param symbols - Accumulator for found symbols
+ * @param source - The full source code
+ * @param language - The programming language
+ * @param depth - Current recursion depth
  */
-function extractSymbolsFromNode(node: any, symbols: ASTSymbol[], source: string, language: string, depth = 0): void {
-  if (depth > 10) return; // Prevent infinite recursion
+function extractSymbolsFromNode(
+  node: TreeSitterNode,
+  symbols: ASTSymbol[],
+  source: string,
+  language: string,
+  depth = 0,
+): void {
+  // Prevent infinite recursion
+  if (depth > 10) return;
 
   const symbolTypes: Record<string, ASTSymbol['type']> = {
     function_declaration: 'function',
@@ -179,7 +217,7 @@ function extractSymbolsFromNode(node: any, symbols: ASTSymbol[], source: string,
   if (nodeType) {
     const nameNode =
       node.childForFieldName?.('name') ||
-      node.children?.find((c: any) => c.type === 'identifier' || c.type === 'type_identifier');
+      node.children?.find((c: TreeSitterNode) => c.type === 'identifier' || c.type === 'type_identifier');
 
     if (nameNode) {
       const symbol: ASTSymbol = {
@@ -222,7 +260,8 @@ function extractSymbolsFromNode(node: any, symbols: ASTSymbol[], source: string,
       }
 
       symbols.push(symbol);
-      return; // Don't recurse into the same symbol
+      // Don't recurse into the same symbol
+      return;
     }
   }
 
@@ -232,23 +271,24 @@ function extractSymbolsFromNode(node: any, symbols: ASTSymbol[], source: string,
   }
 }
 
-function isExported(node: any, source: string): boolean {
+function isExported(node: TreeSitterNode, source: string): boolean {
   const lineStart = source.lastIndexOf('\n', node.startIndex) + 1;
   const lineText = source.slice(lineStart, node.startIndex + 50);
   return /export\s/.test(lineText) || /^pub\s/.test(lineText);
 }
 
-function extractParams(paramsNode: any): string[] {
+function extractParams(paramsNode: TreeSitterNode): string[] {
   return (paramsNode.children || [])
-    .filter((c: any) => c.type !== '(' && c.type !== ')' && c.type !== ',')
-    .map((c: any) => c.text)
+    .filter((c: TreeSitterNode) => c.type !== '(' && c.type !== ')' && c.type !== ',')
+    .map((c: TreeSitterNode) => c.text)
     .filter((t: string) => t.trim().length > 0);
 }
 
 /**
- * Extract call graph from a file — which functions call which.
- * @param filePath
- * @param language
+ * Extract call graph from a file -- which functions call which.
+ * @param filePath - Path to the source file
+ * @param language - The programming language
+ * @returns Array of call graph entries or null if parsing unavailable
  */
 export async function extractCallGraph(filePath: string, language: string): Promise<CallGraphEntry[] | null> {
   const lang = await loadLanguage(language);
@@ -263,7 +303,7 @@ export async function extractCallGraph(filePath: string, language: string): Prom
     const calls: CallGraphEntry[] = [];
     const funcStack: string[] = [];
 
-    function walkForCalls(node: any): void {
+    function walkForCalls(node: TreeSitterNode): void {
       // Track function scope
       const isFuncDef = ['function_declaration', 'function_definition', 'method_definition', 'arrow_function'].includes(
         node.type,
@@ -310,8 +350,9 @@ export async function extractCallGraph(filePath: string, language: string): Prom
 
 /**
  * Extract scope information from a file.
- * @param filePath
- * @param language
+ * @param filePath - Path to the source file
+ * @param language - The programming language
+ * @returns Array of scope information or null if parsing unavailable
  */
 export async function extractScopes(filePath: string, language: string): Promise<ScopeInfo[] | null> {
   const lang = await loadLanguage(language);
@@ -325,7 +366,7 @@ export async function extractScopes(filePath: string, language: string): Promise
 
     const scopes: ScopeInfo[] = [];
 
-    function walkForScopes(node: any, parent: ScopeInfo | null): void {
+    function walkForScopes(node: TreeSitterNode, parent: ScopeInfo | null): void {
       const scopeTypes = [
         'function_declaration',
         'function_definition',

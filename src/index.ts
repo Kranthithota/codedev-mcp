@@ -17,20 +17,16 @@
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { z } from 'zod';
-import path from 'node:path';
-import { readFile, stat, access } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
 
 // CLI argument handling
 const args = process.argv.slice(2);
 if (args.includes('--version') || args.includes('-v')) {
   const pkg = await import('../package.json', { with: { type: 'json' } });
-  console.log(`codedev-mcp v${pkg.default.version}`);
+  process.stdout.write(`codedev-mcp v${pkg.default.version}\n`);
   process.exit(0);
 }
 if (args.includes('--help') || args.includes('-h')) {
-  console.log(`
+  process.stdout.write(`
 codedev-mcp — Universal Code Development MCP Server
 
 Usage: codedev-mcp [options]
@@ -48,76 +44,12 @@ Environment Variables:
 Examples:
   npx codedev-mcp
   codedev-mcp --timeout 60000
-`);
+\n`);
   process.exit(0);
 }
 
-// Parse timeout from args or env
-const timeoutArg = args.findIndex(a => a === '--timeout');
-const REQUEST_TIMEOUT = timeoutArg >= 0
-  ? parseInt(args[timeoutArg + 1], 10)
-  : parseInt(process.env.CODEDEV_TIMEOUT || '30000', 10);
-
-// Configuration
-import { CWD, ROOTS, IS_MULTI_ROOT, safePath } from './config.js';
-
-// Internal modules
-import { searchCode, listFiles, readFileRange, countLines } from './search/fast-search.js';
-import { extractSymbols, extractImports, analyzeFile, formatFileOutline } from './analyzers/symbols.js';
-import { mapCodebase, mapSymbols } from './analyzers/codebase.js';
-import {
-  isGitRepo,
-  getGitLog,
-  getGitLogWithFiles,
-  getGitDiff,
-  getGitBlame,
-  getGitStatus,
-  getGitBranch,
-  getGitBranches,
-  getGitShow,
-  getContributors,
-} from './analyzers/git.js';
-import { detectLanguage, getAllKnownExtensions } from './utils/languages.js';
-
-// New feature modules
-import { cache, toolResultCache } from './cache/memory-cache.js';
-import { semanticSearch } from './search/semantic.js';
-import {
-  initTreeSitter,
-  isTreeSitterReady,
-  parseAST,
-  extractCallGraph,
-  extractScopes,
-} from './analyzers/tree-sitter.js';
-import { parseCoverage, getFileCoverage, getUntestedFiles, findTestFiles } from './analyzers/coverage.js';
-import { extractDocs, findUndocumented } from './analyzers/docs.js';
-import { securityScan } from './analyzers/security.js';
-import { analyzeImpact, categorizeChanges } from './analyzers/impact.js';
-import { parseNotebook, findNotebooks, extractCode, notebookHealth } from './analyzers/notebook.js';
-import { loadPlugins, getPluginPatterns } from './utils/plugins.js';
-
-// v3.0.0 feature modules
-import { detectDeadCode } from './analyzers/dead-code.js';
-import { compareBranches } from './analyzers/branch-compare.js';
-import { generateHeatmap } from './analyzers/complexity-heatmap.js';
-import { packContext } from './analyzers/context-pack.js';
-import { analyzeTypeFlow } from './analyzers/type-flow.js';
-import { checkArchitecture } from './analyzers/architecture.js';
-import { analyzeDBSchema } from './analyzers/db-schema.js';
-import { analyzeApiContracts } from './analyzers/api-contract.js';
-import { analyzeIaC } from './analyzers/iac.js';
-import { parseCICD } from './analyzers/cicd.js';
-import { analyzeMonorepo } from './analyzers/monorepo.js';
-import { analytics } from './utils/analytics.js';
 import { logger } from './utils/logger.js';
-import { scanDependencyVulns } from './analyzers/dep-vuln.js';
-import { analyzePerformance } from './analyzers/perf-profile.js';
-import { listTemplates, generateScaffold } from './analyzers/scaffold.js';
-import { manageGitHooks } from './utils/git-hooks.js';
-import { SqliteStore } from './db/sqlite-store.js';
-import { outputSchemas } from './schemas/output-schemas.js';
 
-// Tool Registries
 // Tool Registries
 import { registerSearchTools } from './tools/search.js';
 import { registerAnalysisTools } from './tools/analysis.js';
@@ -137,7 +69,7 @@ import { SERVER_INSTRUCTIONS } from './constants/instructions.js';
 import { registerHealthResource } from './resources/health.js';
 import { toolLimiter } from './utils/concurrency.js';
 
-// ── Create MCP Server ───────────────────────────────────────────────────
+// Create MCP Server
 const server = new McpServer(
   { name: 'codedev-mcp', version: VERSION },
   {
@@ -148,9 +80,18 @@ const server = new McpServer(
 
 // Wrap all tool handlers with concurrency limiter to prevent resource exhaustion
 // when MCP clients send many parallel tool calls.
-const _registerTool = server.registerTool.bind(server);
-(server as any).registerTool = (name: string, config: any, handler: (...args: any[]) => Promise<any>) => {
-  return _registerTool(name, config, async (...args: any[]) => toolLimiter.run(() => handler(...args)));
+const originalRegisterTool = server.registerTool.bind(server);
+
+(
+  server as {
+    registerTool: (name: string, config: unknown, handler: (...args: unknown[]) => Promise<unknown>) => unknown;
+  }
+).registerTool = (name: string, config: unknown, handler: (...args: unknown[]) => Promise<unknown>) => {
+  const wrappedHandler = async (...handlerArgs: unknown[]) => {
+    return toolLimiter.run(async () => (handler as (...args: unknown[]) => Promise<unknown>)(...handlerArgs));
+  };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Config type is complex from MCP SDK
+  return originalRegisterTool(name, config as any, wrappedHandler as any);
 };
 
 // Register Tools
@@ -170,8 +111,11 @@ registerScaffoldTools(server);
 // Register Resources
 registerHealthResource(server, VERSION);
 
-// Start server
-async function runServer() {
+/**
+ * Starts the MCP server using stdio transport and initializes the database.
+ * @returns A promise that resolves when the server is running.
+ */
+async function runServer(): Promise<void> {
   const transport = new StdioServerTransport();
   await server.connect(transport);
 

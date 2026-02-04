@@ -4,7 +4,7 @@
  * SQLAlchemy models, TypeORM entities, and Sequelize models.
  */
 
-import { listFiles, searchCode } from '../search/fast-search.js';
+import { listFiles } from '../search/fast-search.js';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -15,14 +15,16 @@ export interface DBColumn {
   primary?: boolean;
   unique?: boolean;
   default?: string;
-  references?: string; // FK target
+  /** FK target */
+  references?: string;
 }
 
 export interface DBTable {
   name: string;
   columns: DBColumn[];
   indexes?: string[];
-  source: string; // file where defined
+  /** File where defined */
+  source: string;
   orm?: string;
 }
 
@@ -108,7 +110,6 @@ function parseDrizzleSchema(content: string, file: string): DBTable[] {
   );
 
   for (const match of tableMatches) {
-    const varName = match[1];
     const tableName = match[2];
     const body = match[3];
     const columns: DBColumn[] = [];
@@ -129,10 +130,11 @@ function parseDrizzleSchema(content: string, file: string): DBTable[] {
 }
 
 /**
- *
- * @param cwd
- * @param options
- * @param options.directory
+ * Analyze database schema from SQL, ORM, and migration files.
+ * @param cwd - The working directory to scan.
+ * @param options - Configuration options.
+ * @param options.directory - The directory to analyze.
+ * @returns The database schema analysis result.
  */
 export async function analyzeDBSchema(cwd: string, options?: { directory?: string }): Promise<DBSchemaResult> {
   const dir = path.resolve(cwd, options?.directory || '.');

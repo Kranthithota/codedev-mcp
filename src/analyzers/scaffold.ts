@@ -6,7 +6,6 @@
  */
 
 import { listFiles } from '../search/fast-search.js';
-import { extractSymbols } from './symbols.js';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -22,7 +21,8 @@ export interface ScaffoldResult {
   generatedCode: string;
   fileName: string;
   language: string;
-  conventions: string[]; // detected project conventions applied
+  /** Detected project conventions applied */
+  conventions: string[];
 }
 
 export interface ConventionResult {
@@ -33,7 +33,8 @@ export interface ConventionResult {
 
 /**
  * Detect project conventions from existing files.
- * @param cwd
+ * @param cwd - The working directory
+ * @returns Detected project type and convention patterns
  */
 async function detectConventions(cwd: string): Promise<{ projectType: string; patterns: string[] }> {
   const patterns: string[] = [];
@@ -99,14 +100,14 @@ async function detectConventions(cwd: string): Promise<{ projectType: string; pa
 
 /**
  * Generate a React component scaffold.
- * @param name
- * @param conventions
+ * @param name - Component name
+ * @param conventions - Detected project conventions
+ * @returns Generated component code
  */
 function reactComponent(name: string, conventions: string[]): string {
   const hasTs = conventions.includes('TypeScript');
   const hasTailwind = conventions.includes('Tailwind CSS');
 
-  const ext = hasTs ? 'tsx' : 'jsx';
   const propsType = hasTs ? `\ninterface ${name}Props {\n  // TODO: define props\n}\n` : '';
   const propsParam = hasTs ? `{ }: ${name}Props` : '{ }';
   const className = hasTailwind ? ' className="flex items-center gap-2"' : '';
@@ -125,9 +126,10 @@ export default function ${name}(${propsParam}) {
 
 /**
  * Generate a test file scaffold.
- * @param name
- * @param conventions
- * @param targetFile
+ * @param name - Module or function name to test
+ * @param conventions - Detected project conventions
+ * @param targetFile - Path to the file being tested
+ * @returns Generated test file code
  */
 function testFile(name: string, conventions: string[], targetFile: string): string {
   const isVitest = conventions.includes('Vitest testing');
@@ -156,8 +158,9 @@ describe('${name}', () => {
 
 /**
  * Generate an Express route scaffold.
- * @param name
- * @param conventions
+ * @param name - Route name
+ * @param conventions - Detected project conventions
+ * @returns Generated Express route code
  */
 function expressRoute(name: string, conventions: string[]): string {
   const hasTs = conventions.includes('TypeScript');
@@ -197,8 +200,9 @@ export default router;
 
 /**
  * Generate a service/module scaffold.
- * @param name
- * @param conventions
+ * @param name - Service name
+ * @param conventions - Detected project conventions
+ * @returns Generated service class code
  */
 function serviceModule(name: string, conventions: string[]): string {
   const hasTs = conventions.includes('TypeScript');
@@ -235,7 +239,8 @@ export function create${name}(${hasTs ? `options?: ${name}Options` : 'options'})
 
 /**
  * List available scaffold templates based on project conventions.
- * @param cwd
+ * @param cwd - The working directory
+ * @returns Available templates, detected patterns, and project type
  */
 export async function listTemplates(cwd: string): Promise<ConventionResult> {
   const { projectType, patterns } = await detectConventions(cwd);
@@ -288,17 +293,18 @@ export async function listTemplates(cwd: string): Promise<ConventionResult> {
 
 /**
  * Generate scaffold code for a given template and name.
- * @param cwd
- * @param options
- * @param options.template
- * @param options.name
- * @param options.targetFile
+ * @param cwd - The working directory
+ * @param options - Scaffold options
+ * @param options.template - Template type to generate
+ * @param options.name - Name for the generated code
+ * @param options.targetFile - Optional target file path
+ * @returns Generated scaffold result with code and metadata
  */
 export async function generateScaffold(
   cwd: string,
   options: { template: string; name: string; targetFile?: string },
 ): Promise<ScaffoldResult> {
-  const { projectType, patterns } = await detectConventions(cwd);
+  const { patterns } = await detectConventions(cwd);
   const { template, name, targetFile } = options;
 
   let generatedCode: string;

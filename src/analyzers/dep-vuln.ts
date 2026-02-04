@@ -5,7 +5,6 @@
  * Checks for outdated packages, known-vulnerable version ranges, and security advisories.
  */
 
-import { listFiles } from '../search/fast-search.js';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -87,8 +86,9 @@ const KNOWN_VULN_PATTERNS: { name: RegExp; maxSafe?: string; severity: VulnDepen
 
 /**
  * Simple semver comparison (major.minor.patch). Returns true if a < b.
- * @param a
- * @param b
+ * @param a - First version string
+ * @param b - Second version string
+ * @returns True if version a is less than version b
  */
 function semverLessThan(a: string, b: string): boolean {
   const parse = (v: string) =>
@@ -107,10 +107,10 @@ function semverLessThan(a: string, b: string): boolean {
 
 /**
  * Parse package-lock.json or package.json dependencies.
- * @param content
- * @param file
+ * @param content - The raw file content
+ * @returns Array of dependency name/version pairs
  */
-function parseNpmLock(content: string, file: string): { name: string; version: string }[] {
+function parseNpmLock(content: string): { name: string; version: string }[] {
   const deps: { name: string; version: string }[] = [];
   try {
     const data = JSON.parse(content);
@@ -118,18 +118,18 @@ function parseNpmLock(content: string, file: string): { name: string; version: s
     // package-lock.json v2/v3
     if (data.packages) {
       for (const [pkgPath, info] of Object.entries(data.packages)) {
-        const d = info as any;
+        const d = info as Record<string, unknown>;
         if (pkgPath && d.version) {
           const name = pkgPath.replace(/^node_modules\//, '').replace(/.*node_modules\//, '');
-          if (name) deps.push({ name, version: d.version });
+          if (name) deps.push({ name, version: d.version as string });
         }
       }
     }
     // package-lock.json v1
     else if (data.dependencies) {
       for (const [name, info] of Object.entries(data.dependencies)) {
-        const d = info as any;
-        if (d.version) deps.push({ name, version: d.version });
+        const d = info as Record<string, unknown>;
+        if (d.version) deps.push({ name, version: d.version as string });
       }
     }
     // package.json (fallback, ranges only)
@@ -146,7 +146,8 @@ function parseNpmLock(content: string, file: string): { name: string; version: s
 
 /**
  * Parse Cargo.lock.
- * @param content
+ * @param content - The raw Cargo.lock content
+ * @returns Array of dependency name/version pairs
  */
 function parseCargoLock(content: string): { name: string; version: string }[] {
   const deps: { name: string; version: string }[] = [];
@@ -160,8 +161,9 @@ function parseCargoLock(content: string): { name: string; version: string }[] {
 
 /**
  * Parse Pipfile.lock or requirements.txt.
- * @param content
- * @param file
+ * @param content - The raw file content
+ * @param file - The file path to determine format
+ * @returns Array of dependency name/version pairs
  */
 function parsePythonDeps(content: string, file: string): { name: string; version: string }[] {
   const deps: { name: string; version: string }[] = [];
@@ -172,8 +174,8 @@ function parsePythonDeps(content: string, file: string): { name: string; version
       for (const section of ['default', 'develop']) {
         const pkgs = data[section] || {};
         for (const [name, info] of Object.entries(pkgs)) {
-          const d = info as any;
-          if (d.version) deps.push({ name, version: d.version.replace(/^==/, '') });
+          const d = info as Record<string, unknown>;
+          if (d.version) deps.push({ name, version: (d.version as string).replace(/^==/, '') });
         }
       }
     } catch {
@@ -191,7 +193,8 @@ function parsePythonDeps(content: string, file: string): { name: string; version
 
 /**
  * Parse go.sum.
- * @param content
+ * @param content - The raw go.sum content
+ * @returns Array of dependency name/version pairs
  */
 function parseGoSum(content: string): { name: string; version: string }[] {
   const deps: { name: string; version: string }[] = [];
@@ -208,7 +211,8 @@ function parseGoSum(content: string): { name: string; version: string }[] {
 
 /**
  * Main vulnerability scan function.
- * @param cwd
+ * @param cwd - The working directory to scan
+ * @returns Vulnerability scan results with findings and summary
  */
 export async function scanDependencyVulns(cwd: string): Promise<DepVulnResult> {
   const vulnerabilities: VulnDependency[] = [];
@@ -226,7 +230,7 @@ export async function scanDependencyVulns(cwd: string): Promise<DepVulnResult> {
 
       // Only parse JSON lock files for now
       if (lockFile === 'package-lock.json') {
-        const deps = parseNpmLock(content, lockFile);
+        const deps = parseNpmLock(content);
         totalDeps += deps.length;
 
         for (const dep of deps) {
@@ -257,7 +261,7 @@ export async function scanDependencyVulns(cwd: string): Promise<DepVulnResult> {
       const content = await readFile(path.join(cwd, 'package.json'), 'utf-8');
       lockFiles.push('package.json');
       ecosystems.add('npm');
-      const deps = parseNpmLock(content, 'package.json');
+      const deps = parseNpmLock(content);
       totalDeps += deps.length;
       for (const dep of deps) {
         for (const pattern of KNOWN_VULN_PATTERNS) {

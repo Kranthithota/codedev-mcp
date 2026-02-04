@@ -6,7 +6,6 @@
 
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import path from 'node:path';
 
 const exec = promisify(execFile);
 
@@ -31,13 +30,14 @@ export interface BranchCompareResult {
 }
 
 /**
- *
- * @param cwd
- * @param base
- * @param compare
- * @param options
- * @param options.includeStats
- * @param options.showConflicts
+ * Compare two git branches and return structural diff information.
+ * @param cwd - The working directory of the git repository.
+ * @param base - The base branch name.
+ * @param compare - The comparison branch name.
+ * @param options - Configuration options.
+ * @param options.includeStats - Whether to include diff stats.
+ * @param options.showConflicts - Whether to detect potential merge conflicts.
+ * @returns The branch comparison result.
  */
 export async function compareBranches(
   cwd: string,
@@ -67,9 +67,10 @@ export async function compareBranches(
     else if (status.startsWith('M')) modified.push(parts[1]);
     else if (status.startsWith('D')) deleted.push(parts[1]);
     else if (status.startsWith('R')) renamed.push({ from: parts[1], to: parts[2] });
-    else if (status.startsWith('C'))
-      added.push(parts[2]); // copy
-    else if (status.startsWith('T')) modified.push(parts[1]); // type change
+    // Copy
+    else if (status.startsWith('C')) added.push(parts[2]);
+    // Type change
+    else if (status.startsWith('T')) modified.push(parts[1]);
   }
 
   // Get diff stats (insertions/deletions per file)

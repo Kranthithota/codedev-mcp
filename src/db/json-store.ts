@@ -17,7 +17,8 @@ interface IndexedFile {
 
 interface IndexedSymbol {
   name: string;
-  type: string; // function, class, interface, etc.
+  /** Symbol kind: function, class, interface, etc. */
+  type: string;
   file: string;
   line: number;
   exported: boolean;
@@ -43,7 +44,7 @@ const INDEX_DIR = '.codedev-mcp';
 const INDEX_FILE = 'index.json';
 
 /**
- *
+ * JSON-file backed persistent index for codebase data.
  */
 export class JsonStore {
   private indexPath: string;
@@ -51,8 +52,8 @@ export class JsonStore {
   private dirty = false;
 
   /**
-   *
-   * @param cwd
+   * Create a new JsonStore instance.
+   * @param cwd - The working directory for the index file.
    */
   constructor(cwd: string) {
     this.indexPath = path.join(cwd, INDEX_DIR, INDEX_FILE);
@@ -60,6 +61,7 @@ export class JsonStore {
 
   /**
    * Load index from disk. Returns false if no index exists.
+   * @returns True if the index was loaded successfully.
    */
   async load(): Promise<boolean> {
     try {
@@ -89,7 +91,7 @@ export class JsonStore {
 
   /**
    * Initialize a new empty index.
-   * @param cwd
+   * @param cwd - The working directory for the index.
    */
   init(cwd: string): void {
     this.index = {
@@ -106,7 +108,8 @@ export class JsonStore {
 
   /**
    * Check if a file needs re-indexing (mtime changed).
-   * @param filePath
+   * @param filePath - The file path to check.
+   * @returns True if the file needs re-indexing.
    */
   async needsReindex(filePath: string): Promise<boolean> {
     if (!this.index) return true;
@@ -122,7 +125,7 @@ export class JsonStore {
 
   /**
    * Update file entry in index.
-   * @param file
+   * @param file - The file entry to update.
    */
   updateFile(file: IndexedFile): void {
     if (!this.index) return;
@@ -134,8 +137,8 @@ export class JsonStore {
 
   /**
    * Update symbols for a file.
-   * @param filePath
-   * @param symbols
+   * @param filePath - The file path whose symbols are being updated.
+   * @param symbols - The new symbols for the file.
    */
   updateSymbols(filePath: string, symbols: IndexedSymbol[]): void {
     if (!this.index) return;
@@ -146,8 +149,8 @@ export class JsonStore {
 
   /**
    * Update imports for a file.
-   * @param filePath
-   * @param imports
+   * @param filePath - The file path whose imports are being updated.
+   * @param imports - The new import paths for the file.
    */
   updateImports(filePath: string, imports: string[]): void {
     if (!this.index) return;
@@ -160,8 +163,9 @@ export class JsonStore {
 
   /**
    * Query symbols by name pattern.
-   * @param pattern
-   * @param type
+   * @param pattern - Regex pattern to match symbol names.
+   * @param type - Optional symbol type filter.
+   * @returns Matching symbols.
    */
   findSymbols(pattern: string, type?: string): IndexedSymbol[] {
     if (!this.index) return [];
@@ -174,6 +178,7 @@ export class JsonStore {
 
   /**
    * Get all files in index.
+   * @returns All indexed files.
    */
   getFiles(): IndexedFile[] {
     return this.index?.files || [];
@@ -181,7 +186,8 @@ export class JsonStore {
 
   /**
    * Get imports for a file.
-   * @param filePath
+   * @param filePath - The file path to look up.
+   * @returns The import paths for the file.
    */
   getImports(filePath: string): string[] {
     return this.index?.imports.find((i) => i.file === filePath)?.imports || [];
@@ -189,7 +195,8 @@ export class JsonStore {
 
   /**
    * Get importers of a file (reverse lookup).
-   * @param filePath
+   * @param filePath - The file path to find importers for.
+   * @returns Files that import the given file.
    */
   getImporters(filePath: string): string[] {
     if (!this.index) return [];
@@ -199,7 +206,7 @@ export class JsonStore {
 
   /**
    * Remove a file from the index.
-   * @param filePath
+   * @param filePath - The file path to remove.
    */
   removeFile(filePath: string): void {
     if (!this.index) return;
@@ -211,6 +218,7 @@ export class JsonStore {
 
   /**
    * Get index stats.
+   * @returns Stats object or null if no index loaded.
    */
   stats(): { files: number; symbols: number; imports: number; updated: string } | null {
     if (!this.index) return null;

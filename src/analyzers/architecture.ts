@@ -119,12 +119,13 @@ async function detectCircular(dir: string, files: string[]): Promise<ArchViolati
 }
 
 /**
- *
- * @param cwd
- * @param options
- * @param options.builtinRules
- * @param options.directory
- * @param options.fileGlob
+ * Check architecture rules and detect violations.
+ * @param cwd - The working directory to scan.
+ * @param options - Configuration options.
+ * @param options.builtinRules - Whether to use built-in rules.
+ * @param options.directory - The directory to check.
+ * @param options.fileGlob - Glob pattern for files to check.
+ * @returns The architecture check result with any violations.
  */
 export async function checkArchitecture(
   cwd: string,

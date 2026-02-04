@@ -30,8 +30,9 @@ async function gitExec(args: string[], cwd: string): Promise<string> {
   try {
     const { stdout } = await execFileAsync('git', args, { ...EXEC_OPTS, cwd });
     return stdout;
-  } catch (error: any) {
-    if (error.stderr?.includes('not a git repository')) {
+  } catch (error: unknown) {
+    const err = error as Record<string, unknown>;
+    if (err.stderr && String(err.stderr).includes('not a git repository')) {
       throw new Error('Not a git repository');
     }
     throw error;
@@ -39,8 +40,9 @@ async function gitExec(args: string[], cwd: string): Promise<string> {
 }
 
 /**
- * Check if directory is a git repo
- * @param cwd
+ * Check if directory is a git repo.
+ * @param cwd - The working directory to check
+ * @returns True if the directory is a git repository
  */
 export async function isGitRepo(cwd: string): Promise<boolean> {
   try {
@@ -52,13 +54,14 @@ export async function isGitRepo(cwd: string): Promise<boolean> {
 }
 
 /**
- * Get recent git log
- * @param cwd
- * @param options
- * @param options.count
- * @param options.filePath
- * @param options.author
- * @param options.since
+ * Get recent git log.
+ * @param cwd - The working directory
+ * @param options - Log options
+ * @param options.count - Maximum number of entries
+ * @param options.filePath - Filter by file path
+ * @param options.author - Filter by author
+ * @param options.since - Filter by date
+ * @returns Array of git log entries
  */
 export async function getGitLog(
   cwd: string,
@@ -69,7 +72,8 @@ export async function getGitLog(
     since?: string;
   },
 ): Promise<GitLogEntry[]> {
-  const args = ['log', `--max-count=${options?.count || 20}`, '--format=%H|%an|%ai|%s'];
+  const count = options?.count ?? 20;
+  const args = ['log', `--max-count=${count}`, '--format=%H|%an|%ai|%s'];
   if (options?.filePath) args.push('--', options.filePath);
   if (options?.author) args.push(`--author=${options.author}`);
   if (options?.since) args.push(`--since=${options.since}`);
@@ -85,9 +89,10 @@ export async function getGitLog(
 }
 
 /**
- * Get git log with changed files
- * @param cwd
- * @param count
+ * Get git log with changed files.
+ * @param cwd - The working directory
+ * @param count - Maximum number of entries
+ * @returns Array of git log entries including changed file lists
  */
 export async function getGitLogWithFiles(cwd: string, count: number = 10): Promise<GitLogEntry[]> {
   const args = ['log', `--max-count=${count}`, '--format=%H|%an|%ai|%s', '--name-only'];
@@ -108,14 +113,15 @@ export async function getGitLogWithFiles(cwd: string, count: number = 10): Promi
 }
 
 /**
- * Git diff — staged, unstaged, or between refs
- * @param cwd
- * @param options
- * @param options.staged
- * @param options.ref1
- * @param options.ref2
- * @param options.filePath
- * @param options.stat
+ * Git diff -- staged, unstaged, or between refs.
+ * @param cwd - The working directory
+ * @param options - Diff options
+ * @param options.staged - Show staged changes
+ * @param options.ref1 - First ref for comparison
+ * @param options.ref2 - Second ref for comparison
+ * @param options.filePath - Filter by file path
+ * @param options.stat - Show diff stats only
+ * @returns The diff output as a string
  */
 export async function getGitDiff(
   cwd: string,
@@ -138,12 +144,13 @@ export async function getGitDiff(
 }
 
 /**
- * Git blame for a file
- * @param cwd
- * @param filePath
- * @param options
- * @param options.startLine
- * @param options.endLine
+ * Git blame for a file.
+ * @param cwd - The working directory
+ * @param filePath - Path to the file
+ * @param options - Blame options
+ * @param options.startLine - Start line for range
+ * @param options.endLine - End line for range
+ * @returns Array of blame entries per line
  */
 export async function getGitBlame(
   cwd: string,
@@ -193,16 +200,18 @@ export async function getGitBlame(
 }
 
 /**
- * Get current git status
- * @param cwd
+ * Get current git status.
+ * @param cwd - The working directory
+ * @returns Short-format git status output
  */
 export async function getGitStatus(cwd: string): Promise<string> {
   return gitExec(['status', '--short'], cwd);
 }
 
 /**
- * Get current branch name
- * @param cwd
+ * Get current branch name.
+ * @param cwd - The working directory
+ * @returns The current branch name
  */
 export async function getGitBranch(cwd: string): Promise<string> {
   const output = await gitExec(['branch', '--show-current'], cwd);
@@ -210,8 +219,9 @@ export async function getGitBranch(cwd: string): Promise<string> {
 }
 
 /**
- * Get list of all branches
- * @param cwd
+ * Get list of all branches.
+ * @param cwd - The working directory
+ * @returns Array of branch names
  */
 export async function getGitBranches(cwd: string): Promise<string[]> {
   const output = await gitExec(['branch', '-a', '--format=%(refname:short)'], cwd);
@@ -219,10 +229,11 @@ export async function getGitBranches(cwd: string): Promise<string[]> {
 }
 
 /**
- * Show a specific commit
- * @param cwd
- * @param ref
- * @param stat
+ * Show a specific commit.
+ * @param cwd - The working directory
+ * @param ref - The commit reference
+ * @param stat - Whether to show stats only
+ * @returns The commit details as a string
  */
 export async function getGitShow(cwd: string, ref: string, stat?: boolean): Promise<string> {
   const args = ['show'];
@@ -232,9 +243,10 @@ export async function getGitShow(cwd: string, ref: string, stat?: boolean): Prom
 }
 
 /**
- * Get contributors for a file or repo
- * @param cwd
- * @param filePath
+ * Get contributors for a file or repo.
+ * @param cwd - The working directory
+ * @param filePath - Optional file path to filter by
+ * @returns Array of contributors with commit counts
  */
 export async function getContributors(cwd: string, filePath?: string): Promise<{ author: string; commits: number }[]> {
   const args = ['shortlog', '-sne', 'HEAD'];

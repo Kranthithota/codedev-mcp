@@ -11,10 +11,12 @@ import path from 'node:path';
 
 interface SemanticDoc {
   file: string;
-  chunk: string; // Code section (function/block)
+  /** Code section (function/block) */
+  chunk: string;
   startLine: number;
   endLine: number;
-  tokens: string[]; // Extracted meaningful tokens
+  /** Extracted meaningful tokens */
+  tokens: string[];
 }
 
 interface SemanticResult {
@@ -223,25 +225,29 @@ const CONCEPT_MAP: Record<string, string[]> = {
 /**
  * Tokenize code into meaningful words.
  * Splits camelCase, snake_case, removes noise.
- * @param text
+ * @param text - The code text to tokenize.
+ * @returns An array of unique meaningful tokens.
  */
 function tokenize(text: string): string[] {
   // Remove string contents, keep identifiers
   const cleaned = text
-    .replace(/(['"`])[\s\S]*?\1/g, '') // Remove string literals
-    .replace(/\/\/.*$/gm, (m) => m) // Keep comments (useful signals)
-    .replace(/\/\*[\s\S]*?\*\//g, (m) => m); // Keep block comments
+    .replace(/(['"`])[\s\S]*?\1/g, '')
+    // Keep comments (useful signals)
+    .replace(/\/\/.*$/gm, (m) => m)
+    // Keep block comments
+    .replace(/\/\*[\s\S]*?\*\//g, (m) => m);
 
   // Extract words, split camelCase and snake_case
   const words = cleaned
-    .replace(/([a-z])([A-Z])/g, '$1 $2') // camelCase → camel Case
-    .replace(/[_\-./\\]/g, ' ') // snake_case → snake case
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/[_\-./\\]/g, ' ')
     .replace(/[^a-zA-Z0-9\s]/g, ' ')
     .toLowerCase()
     .split(/\s+/)
     .filter((w) => w.length > 2 && !STOP_WORDS.has(w));
 
-  return [...new Set(words)]; // Deduplicate
+  // Deduplicate
+  return [...new Set(words)];
 }
 
 const STOP_WORDS = new Set([
@@ -322,10 +328,12 @@ const STOP_WORDS = new Set([
 
 /**
  * Chunk a file into logical blocks (functions, classes, or fixed-size blocks).
- * @param content
- * @param filePath
+ * @param content - The file content to chunk.
+ * @param _filePath - The file path (unused, reserved for future language-specific chunking).
+ * @returns An array of chunks with line ranges.
  */
-function chunkFile(content: string, filePath: string): { chunk: string; startLine: number; endLine: number }[] {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- Reserved for future language-specific chunking
+function chunkFile(content: string, _filePath: string): { chunk: string; startLine: number; endLine: number }[] {
   const lines = content.split('\n');
   const chunks: { chunk: string; startLine: number; endLine: number }[] = [];
 
@@ -378,7 +386,8 @@ function chunkFile(content: string, filePath: string): { chunk: string; startLin
 
 /**
  * Expand query using concept synonyms.
- * @param query
+ * @param query - The search query to expand.
+ * @returns An expanded array of query terms.
  */
 function expandQuery(query: string): string[] {
   const queryTokens = tokenize(query);
@@ -399,9 +408,10 @@ function expandQuery(query: string): string[] {
 
 /**
  * Calculate TF-IDF score for a chunk against expanded query terms.
- * @param chunkTokens
- * @param queryTerms
- * @param idf
+ * @param chunkTokens - Tokens from the code chunk.
+ * @param queryTerms - Expanded query terms.
+ * @param idf - Inverse document frequency map.
+ * @returns The score and list of matched terms.
  */
 function scoreTfIdf(
   chunkTokens: string[],
@@ -430,10 +440,11 @@ function scoreTfIdf(
 
 /**
  * Perform semantic search across files.
- * @param files
- * @param query
- * @param cwd
- * @param maxResults
+ * @param files - List of file paths to search.
+ * @param query - The search query string.
+ * @param cwd - The working directory.
+ * @param maxResults - Maximum number of results to return.
+ * @returns Ranked search results with scores and snippets.
  */
 export async function semanticSearch(
   files: string[],
@@ -445,7 +456,8 @@ export async function semanticSearch(
 
   // Index all chunks
   const docs: SemanticDoc[] = [];
-  const docFreq = new Map<string, number>(); // Document frequency for IDF
+  // Document frequency for IDF
+  const docFreq = new Map<string, number>();
 
   for (const file of files.slice(0, 500)) {
     try {

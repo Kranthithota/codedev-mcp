@@ -51,11 +51,12 @@ function parseImportDetails(content: string): { from: string; names: string[] }[
 }
 
 /**
- *
- * @param cwd
- * @param options
- * @param options.directory
- * @param options.fileGlob
+ * Detect dead code including unused exports and orphan files in a directory.
+ * @param cwd - The working directory to scan
+ * @param options - Configuration options
+ * @param options.directory - Subdirectory to scan
+ * @param options.fileGlob - Glob pattern for files to include
+ * @returns Dead code analysis results including unused exports and orphan files
  */
 export async function detectDeadCode(
   cwd: string,

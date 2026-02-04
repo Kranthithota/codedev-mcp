@@ -4,7 +4,6 @@
  * Builds on dependency_graph + git + symbol search.
  */
 
-import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { searchCode } from '../search/fast-search.js';
 import { logger } from '../utils/logger.js';
@@ -29,7 +28,8 @@ export interface ImpactResult {
 
 /**
  * Parse a git diff to extract changed symbols.
- * @param diff
+ * @param diff - The raw git diff output
+ * @returns Array of changed symbols with change types
  */
 export function parseDiffForSymbols(diff: string): ChangedSymbol[] {
   const symbols: ChangedSymbol[] = [];
@@ -86,9 +86,10 @@ export function parseDiffForSymbols(diff: string): ChangedSymbol[] {
 
 /**
  * Analyze the impact of changes on the codebase.
- * @param cwd
- * @param changedFiles
- * @param diff
+ * @param cwd - The working directory
+ * @param changedFiles - List of changed file paths
+ * @param diff - Optional raw git diff output
+ * @returns Impact analysis with affected files, symbols, tests, and risk level
  */
 export async function analyzeImpact(cwd: string, changedFiles: string[], diff?: string): Promise<ImpactResult> {
   const changedSymbols = diff ? parseDiffForSymbols(diff) : [];
@@ -213,7 +214,8 @@ export async function analyzeImpact(cwd: string, changedFiles: string[], diff?: 
 
 /**
  * Categorize changes as refactor/bugfix/feature/breaking.
- * @param diff
+ * @param diff - The raw git diff output
+ * @returns Category, confidence score, and indicators
  */
 export function categorizeChanges(diff: string): {
   category: string;

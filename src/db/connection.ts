@@ -7,29 +7,31 @@ let initPromise: Promise<SqliteStore> | null = null;
 /**
  * Get the singleton database instance.
  * Initializes it if not already initialized.
+ * @returns The singleton SqliteStore instance.
  */
 export async function getDb(): Promise<SqliteStore> {
-    if (dbInstance) return dbInstance;
+  if (dbInstance) return dbInstance;
 
-    if (!initPromise) {
-        initPromise = (async () => {
-            const store = new SqliteStore(CWD);
-            await store.init(CWD);
-            await store.load(); // Try to load existing
-            dbInstance = store;
-            return store;
-        })();
-    }
+  if (!initPromise) {
+    initPromise = (async () => {
+      const store = new SqliteStore(CWD);
+      await store.init(CWD);
+      // Try to load existing
+      await store.load();
+      dbInstance = store;
+      return store;
+    })();
+  }
 
-    return initPromise;
+  return initPromise;
 }
 
 /**
  * Close the database connection.
  */
 export async function closeDb(): Promise<void> {
-    if (dbInstance) {
-        dbInstance.close();
-        dbInstance = null;
-    }
+  if (dbInstance) {
+    dbInstance.close();
+    dbInstance = null;
+  }
 }

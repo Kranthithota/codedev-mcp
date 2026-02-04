@@ -87,13 +87,14 @@ function score(m: ComplexityEntry['metrics']): number {
 }
 
 /**
- *
- * @param cwd
- * @param options
- * @param options.directory
- * @param options.fileGlob
- * @param options.top
- * @param options.granularity
+ * Generate a complexity heatmap for source files and functions.
+ * @param cwd - The working directory to scan.
+ * @param options - Configuration options.
+ * @param options.directory - The directory to analyze.
+ * @param options.fileGlob - Glob pattern for files to analyze.
+ * @param options.top - Number of top results to return.
+ * @param options.granularity - Analysis granularity level.
+ * @returns The heatmap result with hotspots and file scores.
  */
 export async function generateHeatmap(
   cwd: string,

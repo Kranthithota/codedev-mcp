@@ -8,7 +8,8 @@ import { readFile } from 'node:fs/promises';
 
 export interface DocEntry {
   symbol: string;
-  symbolType: string; // function, class, method, etc.
+  /** The type of symbol: function, class, method, etc. */
+  symbolType: string;
   file: string;
   line: number;
   doc: string;
@@ -21,8 +22,9 @@ export interface DocEntry {
 
 /**
  * Extract all documentation from a file.
- * @param filePath
- * @param language
+ * @param filePath - Path to the source file
+ * @param language - Programming language of the file
+ * @returns Array of documentation entries found in the file
  */
 export async function extractDocs(filePath: string, language: string): Promise<DocEntry[]> {
   const content = await readFile(filePath, 'utf-8');
@@ -54,8 +56,9 @@ export async function extractDocs(filePath: string, language: string): Promise<D
 
 /**
  * Extract JSDoc comments.
- * @param lines
- * @param filePath
+ * @param lines - Array of source lines
+ * @param filePath - Path to the source file
+ * @returns Array of documentation entries
  */
 function extractJSDoc(lines: string[], filePath: string): DocEntry[] {
   const docs: DocEntry[] = [];
@@ -65,13 +68,13 @@ function extractJSDoc(lines: string[], filePath: string): DocEntry[] {
     // Look for /** ... */ blocks
     if (lines[i].trim().startsWith('/**')) {
       const commentLines: string[] = [];
-      const startLine = i + 1;
 
       while (i < lines.length && !lines[i].includes('*/')) {
         commentLines.push(lines[i]);
         i++;
       }
-      if (i < lines.length) commentLines.push(lines[i]); // Include closing */
+      // Include closing */
+      if (i < lines.length) commentLines.push(lines[i]);
       i++;
 
       // Next non-empty line should be the symbol definition
@@ -194,8 +197,9 @@ function parseJSDocComment(comment: string): {
 
 /**
  * Extract Python docstrings.
- * @param lines
- * @param filePath
+ * @param lines - Array of source lines
+ * @param filePath - Path to the source file
+ * @returns Array of documentation entries
  */
 function extractPythonDocs(lines: string[], filePath: string): DocEntry[] {
   const docs: DocEntry[] = [];
@@ -215,7 +219,8 @@ function extractPythonDocs(lines: string[], filePath: string): DocEntry[] {
       while (j < lines.length && lines[j].trim() === '') j++;
       // Skip to after the ):
       while (j < lines.length && !lines[j].includes(':') && j - i < 5) j++;
-      j++; // move past the colon line
+      // Move past the colon line
+      j++;
       while (j < lines.length && lines[j].trim() === '') j++;
 
       if (j < lines.length) {
@@ -312,8 +317,9 @@ function parsePythonDocstring(doc: string): {
 
 /**
  * Extract Javadoc comments.
- * @param lines
- * @param filePath
+ * @param lines - Array of source lines
+ * @param filePath - Path to the source file
+ * @returns Array of documentation entries
  */
 function extractJavadoc(lines: string[], filePath: string): DocEntry[] {
   // Javadoc uses same /** */ format as JSDoc
@@ -322,8 +328,9 @@ function extractJavadoc(lines: string[], filePath: string): DocEntry[] {
 
 /**
  * Extract Rust /// doc comments.
- * @param lines
- * @param filePath
+ * @param lines - Array of source lines
+ * @param filePath - Path to the source file
+ * @returns Array of documentation entries
  */
 function extractRustdoc(lines: string[], filePath: string): DocEntry[] {
   const docs: DocEntry[] = [];
@@ -379,8 +386,9 @@ function parseRustSymbol(line: string, lineNum: number): { symbol: string; symbo
 
 /**
  * Extract Go doc comments (comments directly preceding declarations).
- * @param lines
- * @param filePath
+ * @param lines - Array of source lines
+ * @param filePath - Path to the source file
+ * @returns Array of documentation entries
  */
 function extractGoDocs(lines: string[], filePath: string): DocEntry[] {
   const docs: DocEntry[] = [];
@@ -431,8 +439,9 @@ function parseGoSymbol(line: string, lineNum: number): { symbol: string; symbolT
 
 /**
  * Extract C-style block comment and line comment docs.
- * @param lines
- * @param filePath
+ * @param lines - Array of source lines
+ * @param filePath - Path to the source file
+ * @returns Array of documentation entries
  */
 function extractCStyleDocs(lines: string[], filePath: string): DocEntry[] {
   return extractJSDoc(lines, filePath);
@@ -441,19 +450,18 @@ function extractCStyleDocs(lines: string[], filePath: string): DocEntry[] {
 /**
  * Generic doc extraction for unsupported languages.
  * Looks for any comment blocks before definitions.
- * @param lines
- * @param filePath
+ * @param lines - Array of source lines
+ * @param filePath - Path to the source file
+ * @returns Array of documentation entries
  */
 function extractGenericDocs(lines: string[], filePath: string): DocEntry[] {
   const docs: DocEntry[] = [];
   const commentBlock: string[] = [];
-  let commentStart = -1;
 
   for (let i = 0; i < lines.length; i++) {
     const trimmed = lines[i].trim();
 
     if (trimmed.startsWith('//') || trimmed.startsWith('#') || trimmed.startsWith('--')) {
-      if (commentBlock.length === 0) commentStart = i;
       commentBlock.push(trimmed.replace(/^[/#-]+\s?/, ''));
     } else if (commentBlock.length > 0 && trimmed) {
       // Check if this line looks like a definition
@@ -479,8 +487,9 @@ function extractGenericDocs(lines: string[], filePath: string): DocEntry[] {
 
 /**
  * Find undocumented public symbols in a file.
- * @param filePath
- * @param language
+ * @param filePath - Path to the source file
+ * @param language - Programming language of the file
+ * @returns Array of undocumented symbols with line numbers
  */
 export async function findUndocumented(
   filePath: string,

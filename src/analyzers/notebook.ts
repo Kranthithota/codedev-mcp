@@ -4,7 +4,6 @@
  */
 
 import { readFile } from 'node:fs/promises';
-import path from 'node:path';
 import { glob } from 'glob';
 
 export interface NotebookCell {
@@ -32,7 +31,8 @@ export interface NotebookInfo {
 
 /**
  * Parse a Jupyter notebook file.
- * @param filePath
+ * @param filePath - Path to the .ipynb file
+ * @returns Parsed notebook information including cells, imports, and execution state
  */
 export async function parseNotebook(filePath: string): Promise<NotebookInfo> {
   const content = await readFile(filePath, 'utf-8');
@@ -124,7 +124,8 @@ export async function parseNotebook(filePath: string): Promise<NotebookInfo> {
 
 /**
  * Find all notebooks in a directory.
- * @param cwd
+ * @param cwd - The working directory to search
+ * @returns Array of notebook file paths
  */
 export async function findNotebooks(cwd: string): Promise<string[]> {
   return glob('**/*.ipynb', {
@@ -135,7 +136,8 @@ export async function findNotebooks(cwd: string): Promise<string[]> {
 
 /**
  * Extract just the code from a notebook (for analysis).
- * @param notebook
+ * @param notebook - Parsed notebook information
+ * @returns Concatenated code from all code cells
  */
 export function extractCode(notebook: NotebookInfo): string {
   return notebook.cells
@@ -146,7 +148,8 @@ export function extractCode(notebook: NotebookInfo): string {
 
 /**
  * Get notebook health summary.
- * @param notebook
+ * @param notebook - Parsed notebook information
+ * @returns Health issues and overall score
  */
 export function notebookHealth(notebook: NotebookInfo): {
   issues: string[];

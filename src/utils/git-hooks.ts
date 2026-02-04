@@ -9,7 +9,7 @@ import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 
-const exec = promisify(execFile);
+const execFilePromisified = promisify(execFile);
 
 export interface HookResult {
   action: 'generate' | 'preview' | 'status';
@@ -21,9 +21,10 @@ export interface HookResult {
 }
 
 /**
- *
- * @param cwd
- * @param action
+ * Manage git hooks: generate, preview, or check status.
+ * @param cwd - The working directory (git repository root).
+ * @param action - The action to perform: 'generate', 'preview', or 'status'.
+ * @returns The hook result with relevant information for the action.
  */
 export async function manageGitHooks(cwd: string, action: 'generate' | 'preview' | 'status'): Promise<HookResult> {
   const hookPath = path.join(cwd, '.git', 'hooks', 'pre-commit');
@@ -44,7 +45,9 @@ export async function manageGitHooks(cwd: string, action: 'generate' | 'preview'
   if (action === 'preview') {
     const findings: HookResult['previewFindings'] = [];
     try {
-      const { stdout } = await exec('git', ['diff', '--cached', '--name-only', '--diff-filter=ACM'], { cwd });
+      const { stdout } = await execFilePromisified('git', ['diff', '--cached', '--name-only', '--diff-filter=ACM'], {
+        cwd,
+      });
       const staged = stdout
         .trim()
         .split('\n')

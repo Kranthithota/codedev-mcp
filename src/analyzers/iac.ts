@@ -190,10 +190,11 @@ function parseK8sManifest(content: string, file: string): { resources: IaCResour
 }
 
 /**
- *
- * @param cwd
- * @param options
- * @param options.directory
+ * Analyze Infrastructure-as-Code files in a directory for resources and issues.
+ * @param cwd - The working directory
+ * @param options - Analysis options
+ * @param options.directory - Subdirectory to scan
+ * @returns IaC analysis results with resources, issues, and summary
  */
 export async function analyzeIaC(cwd: string, options?: { directory?: string }): Promise<IaCResult> {
   const dir = path.resolve(cwd, options?.directory || '.');

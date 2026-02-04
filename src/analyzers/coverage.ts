@@ -27,7 +27,8 @@ export interface CoverageSummary {
 
 /**
  * Auto-detect and parse coverage from common file locations.
- * @param cwd
+ * @param cwd - The working directory to scan.
+ * @returns The parsed coverage summary, or null if no coverage data found.
  */
 export async function parseCoverage(cwd: string): Promise<CoverageSummary | null> {
   // Try common coverage file locations
@@ -64,8 +65,9 @@ export async function parseCoverage(cwd: string): Promise<CoverageSummary | null
 
 /**
  * Parse LCOV format (most common).
- * @param content
- * @param cwd
+ * @param content - The LCOV file content.
+ * @param cwd - The working directory for resolving paths.
+ * @returns The parsed coverage summary.
  */
 function parseLcov(content: string, cwd: string): CoverageSummary {
   const files: FileCoverage[] = [];
@@ -130,14 +132,15 @@ function parseLcov(content: string, cwd: string): CoverageSummary {
 
 /**
  * Parse Istanbul JSON coverage format.
- * @param content
- * @param cwd
+ * @param content - The Istanbul JSON content.
+ * @param cwd - The working directory for resolving paths.
+ * @returns The parsed coverage summary.
  */
 function parseIstanbul(content: string, cwd: string): CoverageSummary {
-  const data = JSON.parse(content);
+  const data = JSON.parse(content) as Record<string, Record<string, unknown>>;
   const files: FileCoverage[] = [];
 
-  for (const [filePath, coverage] of Object.entries(data) as [string, any][]) {
+  for (const [filePath, coverage] of Object.entries(data)) {
     const relPath = path.relative(cwd, filePath) || filePath;
     const statements = coverage.s || {};
     const functions = coverage.f || {};
@@ -148,19 +151,21 @@ function parseIstanbul(content: string, cwd: string): CoverageSummary {
     const branchValues = Object.values(branches).flat() as number[];
 
     const uncoveredLines: number[] = [];
-    if (coverage.statementMap) {
+    const statementMap = coverage.statementMap as Record<string, Record<string, Record<string, number>>> | undefined;
+    if (statementMap) {
       for (const [key, count] of Object.entries(statements)) {
-        if ((count as number) === 0 && coverage.statementMap[key]) {
-          uncoveredLines.push(coverage.statementMap[key].start.line);
+        if ((count as number) === 0 && statementMap[key]) {
+          uncoveredLines.push(statementMap[key].start.line);
         }
       }
     }
 
     const uncoveredFunctions: string[] = [];
-    if (coverage.fnMap) {
+    const fnMap = coverage.fnMap as Record<string, Record<string, string>> | undefined;
+    if (fnMap) {
       for (const [key, count] of Object.entries(functions)) {
-        if ((count as number) === 0 && coverage.fnMap[key]) {
-          uncoveredFunctions.push(coverage.fnMap[key].name || `anonymous_${key}`);
+        if ((count as number) === 0 && fnMap[key]) {
+          uncoveredFunctions.push(fnMap[key].name || `anonymous_${key}`);
         }
       }
     }
@@ -197,14 +202,15 @@ function parseIstanbul(content: string, cwd: string): CoverageSummary {
 
 /**
  * Parse Istanbul summary JSON format.
- * @param content
- * @param cwd
+ * @param content - The Istanbul summary JSON content.
+ * @param cwd - The working directory for resolving paths.
+ * @returns The parsed coverage summary.
  */
 function parseIstanbulSummary(content: string, cwd: string): CoverageSummary {
-  const data = JSON.parse(content);
+  const data = JSON.parse(content) as Record<string, Record<string, Record<string, number>>>;
   const files: FileCoverage[] = [];
 
-  for (const [filePath, coverage] of Object.entries(data) as [string, any][]) {
+  for (const [filePath, coverage] of Object.entries(data)) {
     if (filePath === 'total') continue;
     const relPath = path.relative(cwd, filePath) || filePath;
     files.push({
@@ -230,8 +236,9 @@ function parseIstanbulSummary(content: string, cwd: string): CoverageSummary {
 
 /**
  * Parse Cobertura XML format (basic parser).
- * @param content
- * @param cwd
+ * @param content - The Cobertura XML content.
+ * @param cwd - The working directory for resolving paths.
+ * @returns The parsed coverage summary.
  */
 function parseCobertura(content: string, cwd: string): CoverageSummary {
   const files: FileCoverage[] = [];
@@ -261,8 +268,9 @@ function parseCobertura(content: string, cwd: string): CoverageSummary {
 
 /**
  * Build summary from parsed file coverage data.
- * @param format
- * @param files
+ * @param format - The coverage format name.
+ * @param files - Array of file coverage data.
+ * @returns The aggregated coverage summary.
  */
 function buildSummary(format: string, files: FileCoverage[]): CoverageSummary {
   const totals = files.reduce(
@@ -295,14 +303,16 @@ function buildSummary(format: string, files: FileCoverage[]): CoverageSummary {
       covered: totals.branchesCovered,
       percentage: totals.branchesTotal > 0 ? Math.round((totals.branchesCovered / totals.branchesTotal) * 100) : 0,
     },
-    files: files.sort((a, b) => a.lines.percentage - b.lines.percentage), // Worst-covered first
+    // Worst-covered first
+    files: files.sort((a, b) => a.lines.percentage - b.lines.percentage),
   };
 }
 
 /**
  * Get coverage for a specific file.
- * @param summary
- * @param filePath
+ * @param summary - The coverage summary to search.
+ * @param filePath - The file path to look up.
+ * @returns The file coverage data, or null if not found.
  */
 export function getFileCoverage(summary: CoverageSummary, filePath: string): FileCoverage | null {
   return (
@@ -312,7 +322,8 @@ export function getFileCoverage(summary: CoverageSummary, filePath: string): Fil
 
 /**
  * Find untested files (no coverage data or 0% coverage).
- * @param summary
+ * @param summary - The coverage summary to search.
+ * @returns Array of file paths with zero coverage.
  */
 export function getUntestedFiles(summary: CoverageSummary): string[] {
   return summary.files.filter((f) => f.lines.percentage === 0).map((f) => f.file);
@@ -320,7 +331,8 @@ export function getUntestedFiles(summary: CoverageSummary): string[] {
 
 /**
  * Detect test file locations via naming conventions.
- * @param cwd
+ * @param cwd - The working directory to scan.
+ * @returns Array of test file paths.
  */
 export async function findTestFiles(cwd: string): Promise<string[]> {
   const patterns = [

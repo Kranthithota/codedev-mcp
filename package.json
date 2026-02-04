@@ -50,13 +50,13 @@
   ],
   "author": "",
   "license": "MIT",
-  "homepage": "https://github.com/example/codedev-mcp#readme",
+  "homepage": "https://github.com/Kranthithota/codedev-mcp#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/example/codedev-mcp.git"
+    "url": "git+https://github.com/Kranthithota/codedev-mcp.git"
   },
   "bugs": {
-    "url": "https://github.com/example/codedev-mcp/issues"
+    "url": "https://github.com/Kranthithota/codedev-mcp/issues"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",

@@ -128,8 +128,9 @@ const EXT_MAP: Record<string, string> = {
 };
 
 /**
- *
- * @param filePath
+ * Detect the programming language of a file based on its extension or filename.
+ * @param filePath - The file path to detect language for.
+ * @returns The detected language name or 'unknown'.
  */
 export function detectLanguage(filePath: string): string {
   const lower = filePath.toLowerCase();
@@ -147,8 +148,9 @@ export function detectLanguage(filePath: string): string {
 }
 
 /**
- *
- * @param language
+ * Get all file extensions associated with a language.
+ * @param language - The language name.
+ * @returns An array of file extensions for the language.
  */
 export function getLanguageExtensions(language: string): string[] {
   return Object.entries(EXT_MAP)
@@ -157,15 +159,17 @@ export function getLanguageExtensions(language: string): string[] {
 }
 
 /**
- *
+ * Get all known file extensions from the extension map.
+ * @returns An array of all registered file extensions.
  */
 export function getAllKnownExtensions(): string[] {
   return Object.keys(EXT_MAP);
 }
 
 /**
- *
- * @param filePath
+ * Check if a file is a code file (not data/config/docs).
+ * @param filePath - The file path to check.
+ * @returns True if the file is a code file.
  */
 export function isCodeFile(filePath: string): boolean {
   const lang = detectLanguage(filePath);
@@ -211,7 +215,7 @@ const SYMBOL_PATTERNS: Record<string, LanguageConfig['symbolPatterns']> = {
     exports: [/^__all__\s*=\s*\[(.*?)\]/gms],
   },
   java: {
-    functions: [/(?:public|private|protected|static|\s)+[\w<>\[\]]+\s+(\w+)\s*\(/g],
+    functions: [/(?:public|private|protected|static|\s)+[\w<>[[\]]]+\s+(\w+)\s*\(/g],
     classes: [/(?:public\s+)?(?:abstract\s+)?(?:final\s+)?class\s+(\w+)/g],
     interfaces: [/(?:public\s+)?interface\s+(\w+)/g],
     types: [/(?:public\s+)?enum\s+(\w+)/g],
@@ -220,15 +224,18 @@ const SYMBOL_PATTERNS: Record<string, LanguageConfig['symbolPatterns']> = {
   },
   go: {
     functions: [/func\s+(?:\(\w+\s+\*?\w+\)\s+)?(\w+)\s*\(/g],
-    classes: [], // Go uses structs
+    // Go uses structs instead of classes
+    classes: [],
     interfaces: [/type\s+(\w+)\s+interface\s*\{/g],
-    types: [/type\s+(\w+)\s+(?:struct|int|string|float|bool|map|chan|\[)/g],
+    types: [/type\s+(\w+)\s+(?:struct|int|string|float|bool|map|chan|[[])/g],
     constants: [/(?:const|var)\s+(\w+)/g],
-    exports: [], // Go uses capitalization
+    // Go uses capitalization for exports
+    exports: [],
   },
   rust: {
     functions: [/(?:pub\s+)?(?:async\s+)?fn\s+(\w+)/g],
-    classes: [], // Rust uses structs
+    // Rust uses structs instead of classes
+    classes: [],
     interfaces: [/(?:pub\s+)?trait\s+(\w+)/g],
     types: [/(?:pub\s+)?(?:struct|enum|type)\s+(\w+)/g],
     constants: [/(?:pub\s+)?(?:const|static)\s+(\w+)/g],
@@ -237,7 +244,8 @@ const SYMBOL_PATTERNS: Record<string, LanguageConfig['symbolPatterns']> = {
   cpp: {
     functions: [/(?:\w+[\s*&]+)?(\w+)\s*\([^)]*\)\s*(?:const\s*)?(?:override\s*)?(?:noexcept\s*)?[{;]/g],
     classes: [/(?:class|struct)\s+(\w+)/g],
-    interfaces: [], // C++ uses abstract classes
+    // C++ uses abstract classes instead of interfaces
+    interfaces: [],
     types: [/(?:typedef|using)\s+(\w+)/g, /enum\s+(?:class\s+)?(\w+)/g],
     constants: [/(?:constexpr|const)\s+\w+\s+([A-Z_][A-Z0-9_]+)/g, /#define\s+([A-Z_][A-Z0-9_]+)/g],
     exports: [],
@@ -251,7 +259,7 @@ const SYMBOL_PATTERNS: Record<string, LanguageConfig['symbolPatterns']> = {
     exports: [],
   },
   csharp: {
-    functions: [/(?:public|private|protected|internal|static|async|virtual|override|\s)+[\w<>\[\]?]+\s+(\w+)\s*[(<]/g],
+    functions: [/(?:public|private|protected|internal|static|async|virtual|override|\s)+[\w<>[[\]?]+\s+(\w+)\s*[(<]/g],
     classes: [/(?:public\s+)?(?:abstract\s+)?(?:partial\s+)?(?:static\s+)?class\s+(\w+)/g],
     interfaces: [/(?:public\s+)?interface\s+(\w+)/g],
     types: [/(?:public\s+)?(?:enum|struct|record)\s+(\w+)/g],
@@ -261,7 +269,8 @@ const SYMBOL_PATTERNS: Record<string, LanguageConfig['symbolPatterns']> = {
   ruby: {
     functions: [/def\s+(?:self\.)?(\w+[?!=]?)/g],
     classes: [/class\s+(\w+)/g],
-    interfaces: [], // Ruby uses modules
+    // Ruby uses modules instead of interfaces
+    interfaces: [],
     types: [/module\s+(\w+)/g],
     constants: [/([A-Z_][A-Z0-9_]+)\s*=/g],
     exports: [],
@@ -293,7 +302,8 @@ const SYMBOL_PATTERNS: Record<string, LanguageConfig['symbolPatterns']> = {
   dart: {
     functions: [/(?:\w+[\s<>]*\s+)?(\w+)\s*\([^)]*\)\s*(?:async\s*)?[{=>]/g],
     classes: [/(?:abstract\s+)?class\s+(\w+)/g],
-    interfaces: [], // Dart uses abstract classes
+    // Dart uses abstract classes instead of interfaces
+    interfaces: [],
     types: [/(?:enum|mixin|extension)\s+(\w+)/g],
     constants: [/(?:const|final)\s+\w+\s+([A-Z_]\w+)/g],
     exports: [],
@@ -360,18 +370,19 @@ const SYMBOL_PATTERNS: Record<string, LanguageConfig['symbolPatterns']> = {
 const GENERIC_PATTERNS: LanguageConfig['symbolPatterns'] = {
   functions: [
     /(?:function|func|fn|def|sub|proc|method)\s+(\w+)/g,
-    /(?:public|private|protected|static|\s)+[\w<>\[\]*&]+\s+(\w+)\s*\(/g,
+    /(?:public|private|protected|static|\s)+[\w<>[[\]*&]+\s+(\w+)\s*\(/g,
   ],
   classes: [/(?:class|struct|record)\s+(\w+)/g],
   interfaces: [/(?:interface|trait|protocol)\s+(\w+)/g],
   types: [/(?:type|typedef|enum|union)\s+(\w+)/g],
-  constants: [/(?:const|final|static)\s+[\w<>\[\]]+\s+([A-Z_][A-Z0-9_]+)/g],
+  constants: [/(?:const|final|static)\s+[\w<>[[\]]+\s+([A-Z_][A-Z0-9_]+)/g],
   exports: [/(?:export|pub|public)\s+(?:\w+\s+)*(\w+)/g],
 };
 
 /**
- *
- * @param language
+ * Get symbol extraction patterns for a given language.
+ * @param language - The language name.
+ * @returns Symbol patterns for the language or generic fallback patterns.
  */
 export function getSymbolPatterns(language: string): LanguageConfig['symbolPatterns'] {
   return SYMBOL_PATTERNS[language] || GENERIC_PATTERNS;
@@ -392,7 +403,8 @@ const IMPORT_PATTERNS: Record<string, RegExp[]> = {
   ],
   python: [/^import\s+([\w.]+)/gm, /^from\s+([\w.]+)\s+import/gm],
   java: [/^import\s+(?:static\s+)?([\w.]+)/gm],
-  go: [/["']([\w./]+)["']/g], // inside import blocks
+  // Inside import blocks
+  go: [/["']([\w./]+)["']/g],
   rust: [/use\s+([\w:]+)/g],
   cpp: [/#include\s*[<"]([\w./]+)[>"]/g],
   c: [/#include\s*[<"]([\w./]+)[>"]/g],
@@ -409,8 +421,9 @@ const IMPORT_PATTERNS: Record<string, RegExp[]> = {
 };
 
 /**
- *
- * @param language
+ * Get import detection patterns for a given language.
+ * @param language - The language name.
+ * @returns An array of RegExp patterns for detecting imports.
  */
 export function getImportPatterns(language: string): RegExp[] {
   return IMPORT_PATTERNS[language] || [];
@@ -441,8 +454,9 @@ const COMMENT_STYLES: Record<string, { single?: string; multiStart?: string; mul
 };
 
 /**
- *
- * @param language
+ * Get the comment style for a given language.
+ * @param language - The language name.
+ * @returns The comment style configuration for the language.
  */
 export function getCommentStyle(language: string) {
   return COMMENT_STYLES[language] || { single: '//' };
@@ -450,8 +464,9 @@ export function getCommentStyle(language: string) {
 
 // ── Language categories ─────────────────────────────────────────────────
 /**
- *
- * @param language
+ * Get the category (or categories) a language belongs to.
+ * @param language - The language name.
+ * @returns A comma-separated string of categories or 'General'.
  */
 export function getLanguageCategory(language: string): string {
   const categories: Record<string, string[]> = {

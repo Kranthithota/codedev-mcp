@@ -4,8 +4,8 @@
  * that fit within a given token budget. Helps agents minimize waste.
  */
 
-import { searchCode, listFiles, readFileRange } from '../search/fast-search.js';
-import { extractSymbols, extractImports } from './symbols.js';
+import { searchCode } from '../search/fast-search.js';
+import { extractImports } from './symbols.js';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -14,8 +14,10 @@ export interface ContextItem {
   startLine?: number;
   endLine?: number;
   content: string;
-  relevance: number; // 0-1 score
-  reason: string; // why this was included
+  /** 0-1 score */
+  relevance: number;
+  /** Why this item was included */
+  reason: string;
   estimatedTokens: number;
 }
 
@@ -35,9 +37,10 @@ function estimateTokens(text: string): number {
 
 /**
  * Score a file's relevance to a query based on multiple signals.
- * @param file
- * @param query
- * @param matchCount
+ * @param file - The file path.
+ * @param query - The search query.
+ * @param matchCount - Number of matches found.
+ * @returns A relevance score between 0 and 1.
  */
 function scoreRelevance(file: string, query: string, matchCount: number): number {
   let score = 0;
@@ -66,13 +69,14 @@ function scoreRelevance(file: string, query: string, matchCount: number): number
 
 /**
  * Pack the most relevant context for a given question within a token budget.
- * @param cwd
- * @param options
- * @param options.query
- * @param options.maxTokens
- * @param options.includeImports
- * @param options.includeSymbols
- * @param options.maxFiles
+ * @param cwd - The working directory to scan.
+ * @param options - Configuration options.
+ * @param options.query - The search query.
+ * @param options.maxTokens - Maximum token budget.
+ * @param options.includeImports - Whether to include imported files.
+ * @param options.includeSymbols - Whether to include symbols.
+ * @param options.maxFiles - Maximum number of files to include.
+ * @returns The packed context result.
  */
 export async function packContext(
   cwd: string,
@@ -230,7 +234,8 @@ export async function packContext(
 
 /**
  * Merge overlapping line regions.
- * @param regions
+ * @param regions - Array of line ranges to merge.
+ * @returns Merged non-overlapping line regions.
  */
 function mergeRegions(regions: [number, number][]): [number, number][] {
   if (regions.length === 0) return [];
@@ -249,8 +254,9 @@ function mergeRegions(regions: [number, number][]): [number, number][] {
 
 /**
  * Resolve a relative import path to a file path.
- * @param source
- * @param fromFile
+ * @param source - The import source path.
+ * @param fromFile - The file containing the import.
+ * @returns The resolved file path, or null if not a relative import.
  */
 function resolveImport(source: string, fromFile: string): string | null {
   if (!source.startsWith('.')) return null;

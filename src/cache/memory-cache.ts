@@ -7,23 +7,26 @@ import { stat } from 'node:fs/promises';
 
 interface CacheEntry<T> {
   data: T;
-  mtime?: number; // File modification time (for file-based cache)
-  timestamp: number; // When cached
-  ttl: number; // Time-to-live in ms
+  /** File modification time (for file-based cache) */
+  mtime?: number;
+  /** When cached */
+  timestamp: number;
+  /** Time-to-live in ms */
+  ttl: number;
 }
 
 /**
- *
+ * In-memory cache with TTL and file-mtime-based invalidation.
  */
 export class MemoryCache {
-  private store = new Map<string, CacheEntry<any>>();
+  private store = new Map<string, CacheEntry<unknown>>();
   private maxEntries: number;
   private hits = 0;
   private misses = 0;
 
   /**
-   *
-   * @param maxEntries
+   * Create a new MemoryCache instance.
+   * @param maxEntries - Maximum number of entries to store before evicting.
    */
   constructor(maxEntries = 5000) {
     this.maxEntries = maxEntries;
@@ -31,8 +34,9 @@ export class MemoryCache {
 
   /**
    * Get cached value. Returns null if expired, missing, or file changed.
-   * @param key
-   * @param filePath
+   * @param key - Cache key to look up.
+   * @param filePath - Optional file path for mtime-based invalidation.
+   * @returns The cached value or null if not found/expired.
    */
   async get<T>(key: string, filePath?: string): Promise<T | null> {
     const entry = this.store.get(key);
@@ -70,10 +74,10 @@ export class MemoryCache {
 
   /**
    * Set cached value with optional file path for mtime tracking.
-   * @param key
-   * @param data
-   * @param ttl
-   * @param filePath
+   * @param key - Cache key.
+   * @param data - Data to cache.
+   * @param ttl - Time-to-live in milliseconds.
+   * @param filePath - Optional file path for mtime tracking.
    */
   async set<T>(key: string, data: T, ttl = 60_000, filePath?: string): Promise<void> {
     // Evict oldest if at capacity
@@ -97,7 +101,8 @@ export class MemoryCache {
 
   /**
    * Invalidate specific key or pattern.
-   * @param keyOrPrefix
+   * @param keyOrPrefix - Exact key or prefix to invalidate.
+   * @returns The number of entries invalidated.
    */
   invalidate(keyOrPrefix: string): number {
     let count = 0;
@@ -112,11 +117,12 @@ export class MemoryCache {
 
   /**
    * Invalidate all entries related to a file path.
-   * @param filePath
+   * @param filePath - File path to match against cache keys.
+   * @returns The number of entries invalidated.
    */
   invalidateFile(filePath: string): number {
     let count = 0;
-    for (const [key, entry] of this.store.entries()) {
+    for (const key of this.store.keys()) {
       if (key.includes(filePath)) {
         this.store.delete(key);
         count++;
@@ -136,6 +142,7 @@ export class MemoryCache {
 
   /**
    * Get cache statistics.
+   * @returns An object with size, hits, misses, and hitRate.
    */
   stats(): { size: number; hits: number; misses: number; hitRate: string } {
     const total = this.hits + this.misses;
@@ -155,14 +162,14 @@ export class MemoryCache {
  */
 
 interface ToolResultEntry {
-  result: any;
+  result: unknown;
   timestamp: number;
   ttl: number;
   toolName: string;
 }
 
 /**
- *
+ * Cache for tool call results, keyed by tool name and parameters.
  */
 export class ToolResultCache {
   private store = new Map<string, ToolResultEntry>();
@@ -171,8 +178,8 @@ export class ToolResultCache {
   private misses = 0;
 
   /**
-   *
-   * @param maxEntries
+   * Create a new ToolResultCache instance.
+   * @param maxEntries - Maximum number of entries to store before evicting.
    */
   constructor(maxEntries = 2000) {
     this.maxEntries = maxEntries;
@@ -180,10 +187,11 @@ export class ToolResultCache {
 
   /**
    * Generate a deterministic cache key from tool name + params.
-   * @param toolName
-   * @param params
+   * @param toolName - Name of the tool.
+   * @param params - Tool parameters.
+   * @returns A deterministic cache key string.
    */
-  private makeKey(toolName: string, params: Record<string, any>): string {
+  private makeKey(toolName: string, params: Record<string, unknown>): string {
     // Sort keys for deterministic hashing
     const sorted = Object.keys(params)
       .sort()
@@ -192,14 +200,15 @@ export class ToolResultCache {
           if (params[k] !== undefined) acc[k] = params[k];
           return acc;
         },
-        {} as Record<string, any>,
+        {} as Record<string, unknown>,
       );
     return `tool:${toolName}:${this.simpleHash(JSON.stringify(sorted))}`;
   }
 
   /**
    * Simple FNV-1a-inspired hash for speed.
-   * @param str
+   * @param str - String to hash.
+   * @returns A base-36 hash string.
    */
   private simpleHash(str: string): string {
     let h = 0x811c9dc5;
@@ -212,10 +221,11 @@ export class ToolResultCache {
 
   /**
    * Get cached tool result. Returns null on miss.
-   * @param toolName
-   * @param params
+   * @param toolName - Name of the tool.
+   * @param params - Tool parameters.
+   * @returns The cached result or null if not found/expired.
    */
-  get(toolName: string, params: Record<string, any>): any | null {
+  get(toolName: string, params: Record<string, unknown>): unknown | null {
     const key = this.makeKey(toolName, params);
     const entry = this.store.get(key);
     if (!entry) {
@@ -233,12 +243,12 @@ export class ToolResultCache {
 
   /**
    * Cache a tool result. Default TTL: 120s (tools may return stale data for file changes).
-   * @param toolName
-   * @param params
-   * @param result
-   * @param ttl
+   * @param toolName - Name of the tool.
+   * @param params - Tool parameters.
+   * @param result - The result to cache.
+   * @param ttl - Time-to-live in milliseconds.
    */
-  set(toolName: string, params: Record<string, any>, result: any, ttl = 120_000): void {
+  set(toolName: string, params: Record<string, unknown>, result: unknown, ttl = 120_000): void {
     if (this.store.size >= this.maxEntries) {
       const oldest = this.store.keys().next().value;
       if (oldest) this.store.delete(oldest);
@@ -249,7 +259,8 @@ export class ToolResultCache {
 
   /**
    * Invalidate all cached results for a specific tool.
-   * @param toolName
+   * @param toolName - Name of the tool to invalidate.
+   * @returns The number of entries invalidated.
    */
   invalidateTool(toolName: string): number {
     let count = 0;
@@ -264,7 +275,8 @@ export class ToolResultCache {
 
   /**
    * Invalidate all cached results that might reference a file path.
-   * @param filePath
+   * @param filePath - File path to match against cache keys.
+   * @returns The number of entries invalidated.
    */
   invalidateForFile(filePath: string): number {
     let count = 0;
@@ -277,14 +289,19 @@ export class ToolResultCache {
     return count;
   }
 
-  /** Invalidate all entries. */
+  /**
+   * Invalidate all entries.
+   */
   clear(): void {
     this.store.clear();
     this.hits = 0;
     this.misses = 0;
   }
 
-  /** Stats for analytics integration. */
+  /**
+   * Stats for analytics integration.
+   * @returns An object with size, hits, misses, and hitRate.
+   */
   stats(): { size: number; hits: number; misses: number; hitRate: string } {
     const total = this.hits + this.misses;
     return {

@@ -165,11 +165,12 @@ const SAST_PATTERNS: {
 
 /**
  * Run security scan on codebase.
- * @param cwd
- * @param options
- * @param options.category
- * @param options.severity
- * @param options.fileGlob
+ * @param cwd - The working directory
+ * @param options - Scan options
+ * @param options.category - Filter by finding category
+ * @param options.severity - Filter by severity level
+ * @param options.fileGlob - Glob pattern for files to scan
+ * @returns Security report with findings and dependency info
  */
 export async function securityScan(
   cwd: string,
@@ -263,7 +264,8 @@ export async function securityScan(
 
 /**
  * Analyze dependency files for basic info.
- * @param cwd
+ * @param cwd - The working directory
+ * @returns Dependency count information and lockfile presence
  */
 async function analyzeDependencies(
   cwd: string,

@@ -27,17 +27,12 @@ interface IndexedSymbol {
   exported: boolean;
 }
 
-interface IndexedImport {
-  file: string;
-  imports: string[];
-}
-
 const INDEX_DIR = '.codedev-mcp';
 const INDEX_FILE = 'index.sqlite';
 const SCHEMA_VERSION = 2;
 
 /**
- *
+ * SQLite-backed persistent index for codebase data using sql.js WASM.
  */
 export class SqliteStore {
   private dbPath: string;
@@ -46,14 +41,17 @@ export class SqliteStore {
   private SQL: SqlJsStatic | null = null;
 
   /**
-   *
-   * @param cwd
+   * Create a new SqliteStore instance.
+   * @param cwd - The working directory for the database file.
    */
   constructor(cwd: string) {
     this.dbPath = path.join(cwd, INDEX_DIR, INDEX_FILE);
   }
 
-  /** Initialize sql.js WASM module. */
+  /**
+   * Initialize sql.js WASM module.
+   * @returns The initialized sql.js static instance.
+   */
   private async initSqlJs(): Promise<SqlJsStatic> {
     if (this.SQL) return this.SQL;
     const initSqlJs = (await import('sql.js')).default;
@@ -63,27 +61,34 @@ export class SqliteStore {
   }
 
   /**
-   * Execute a query with bind parameters.
-   * Replaces db.exec() which doesn't support params.
+   * Run a query with bind parameters.
+   * Replaces db.run() which doesn't support params in all cases.
+   * @param sql - The SQL query string.
+   * @param params - Bind parameters for the query.
+   * @returns An array of result rows.
    */
-  private query(sql: string, params: any[] = []): any[][] {
+  private query(sql: string, params: unknown[] = []): unknown[][] {
     if (!this.db) return [];
     try {
-      const stmt = (this.db as any).prepare(sql);
+      const db = this.db as unknown as {
+        prepare(sql: string): { bind(params: unknown[]): void; step(): boolean; get(): unknown[]; free(): void };
+      };
+      const stmt = db.prepare(sql);
       stmt.bind(params);
-      const rows: any[][] = [];
+      const rows: unknown[][] = [];
       while (stmt.step()) {
         rows.push(stmt.get());
       }
       stmt.free();
       return rows;
-    } catch (error) {
-      // logger.error('Query failed', { sql, error }); // logger not imported here yet, strict scope
+    } catch {
       return [];
     }
   }
 
-  /** Create tables if they don't exist. */
+  /**
+   * Create tables if they don't exist.
+   */
   private createSchema(): void {
     if (!this.db) return;
     this.db.run(`
@@ -144,7 +149,10 @@ export class SqliteStore {
     this.db.run(`INSERT OR REPLACE INTO meta (key, value) VALUES ('updated', ?)`, [new Date().toISOString()]);
   }
 
-  /** Load existing database from disk. Returns false if none exists or version mismatch. */
+  /**
+   * Load existing database from disk. Returns false if none exists or version mismatch.
+   * @returns True if the database was loaded successfully.
+   */
   async load(): Promise<boolean> {
     try {
       const SQL = await this.initSqlJs();
@@ -170,7 +178,9 @@ export class SqliteStore {
     }
   }
 
-  /** Save database to disk. */
+  /**
+   * Save database to disk.
+   */
   async save(): Promise<void> {
     if (!this.db || !this.dirty) return;
     this.db.run(`INSERT OR REPLACE INTO meta (key, value) VALUES ('updated', ?)`, [new Date().toISOString()]);
@@ -183,9 +193,10 @@ export class SqliteStore {
 
   /**
    * Initialize a new empty database.
-   * @param _cwd
+   * @param _ - The working directory (unused, kept for interface compatibility).
    */
-  async init(_cwd: string): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async init(_: string): Promise<void> {
     const SQL = await this.initSqlJs();
     this.db = new SQL.Database();
     this.createSchema();
@@ -195,7 +206,8 @@ export class SqliteStore {
 
   /**
    * Check if a file needs re-indexing (mtime changed).
-   * @param filePath
+   * @param filePath - The file path to check.
+   * @returns True if the file needs re-indexing.
    */
   async needsReindex(filePath: string): Promise<boolean> {
     if (!this.db) return true;
@@ -212,7 +224,7 @@ export class SqliteStore {
 
   /**
    * Update file entry in index.
-   * @param file
+   * @param file - The file entry to update.
    */
   updateFile(file: IndexedFile): void {
     if (!this.db) return;
@@ -228,8 +240,8 @@ export class SqliteStore {
 
   /**
    * Update symbols for a file (replaces all).
-   * @param filePath
-   * @param symbols
+   * @param filePath - The file path whose symbols are being updated.
+   * @param symbols - The new symbols for the file.
    */
   updateSymbols(filePath: string, symbols: IndexedSymbol[]): void {
     if (!this.db) return;
@@ -248,8 +260,8 @@ export class SqliteStore {
 
   /**
    * Update imports for a file.
-   * @param filePath
-   * @param imports
+   * @param filePath - The file path whose imports are being updated.
+   * @param imports - The new import paths for the file.
    */
   updateImports(filePath: string, imports: string[]): void {
     if (!this.db) return;
@@ -262,13 +274,14 @@ export class SqliteStore {
 
   /**
    * Query symbols by name pattern.
-   * @param pattern
-   * @param type
+   * @param pattern - Pattern to match symbol names (uses SQL LIKE).
+   * @param type - Optional symbol type filter.
+   * @returns Matching symbols.
    */
   findSymbols(pattern: string, type?: string): IndexedSymbol[] {
     if (!this.db) return [];
     let sql = 'SELECT name, type, file, line, exported FROM symbols WHERE name LIKE ?';
-    const params: any[] = [`%${pattern}%`];
+    const params: unknown[] = [`%${pattern}%`];
 
     if (type) {
       sql += ' AND type = ?';
@@ -285,7 +298,10 @@ export class SqliteStore {
     }));
   }
 
-  /** Get all files in index. */
+  /**
+   * Get all files in index.
+   * @returns All indexed files.
+   */
   getFiles(): IndexedFile[] {
     const rows = this.query('SELECT path, mtime, lines, language, size FROM files');
     return rows.map((row) => ({
@@ -299,7 +315,8 @@ export class SqliteStore {
 
   /**
    * Get imports for a file.
-   * @param filePath
+   * @param filePath - The file path to look up.
+   * @returns The import paths for the file.
    */
   getImports(filePath: string): string[] {
     const rows = this.query('SELECT import_path FROM imports WHERE file = ?', [filePath]);
@@ -308,7 +325,8 @@ export class SqliteStore {
 
   /**
    * Get importers of a file (reverse lookup).
-   * @param filePath
+   * @param filePath - The file path to find importers for.
+   * @returns Files that import the given file.
    */
   getImporters(filePath: string): string[] {
     const baseName = path.basename(filePath, path.extname(filePath));
@@ -318,7 +336,7 @@ export class SqliteStore {
 
   /**
    * Remove a file from the index.
-   * @param filePath
+   * @param filePath - The file path to remove.
    */
   removeFile(filePath: string): void {
     if (!this.db) return;
@@ -328,7 +346,10 @@ export class SqliteStore {
     this.dirty = true;
   }
 
-  /** Get index stats. */
+  /**
+   * Get index stats.
+   * @returns Stats object or null if no database loaded.
+   */
   stats(): { files: number; symbols: number; imports: number; updated: string; engine: string } | null {
     if (!this.db) return null;
     const files = this.query('SELECT COUNT(*) FROM files');
@@ -344,7 +365,9 @@ export class SqliteStore {
     };
   }
 
-  /** Close the database. */
+  /**
+   * Close the database.
+   */
   close(): void {
     if (this.db) {
       this.db.close();
@@ -354,36 +377,44 @@ export class SqliteStore {
 
   /**
    * Log tool usage to DB.
+   * @param tool - Tool name.
+   * @param duration - Duration in milliseconds.
+   * @param success - Whether the operation succeeded.
+   * @param cached - Whether the result was cached.
    */
   logUsage(tool: string, duration: number, success: boolean, cached: boolean): void {
     if (!this.db) return;
-    this.db.run(
-      `INSERT INTO usage_stats (tool, timestamp, duration, success, cached) VALUES (?, ?, ?, ?, ?)`,
-      [tool, Date.now(), duration, success ? 1 : 0, cached ? 1 : 0]
-    );
+    this.db.run(`INSERT INTO usage_stats (tool, timestamp, duration, success, cached) VALUES (?, ?, ?, ?, ?)`, [
+      tool,
+      Date.now(),
+      duration,
+      success ? 1 : 0,
+      cached ? 1 : 0,
+    ]);
     this.dirty = true;
   }
 
   /**
    * Get usage stats.
+   * @returns Aggregated usage statistics per tool.
    */
   getUsageStats(): { tool: string; count: number; errorCount: number; avgDuration: number }[] {
     const rows = this.query(`
-      SELECT 
-        tool, 
-        COUNT(*) as count, 
+      SELECT
+        tool,
+        COUNT(*) as count,
         SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END) as errorCount,
         AVG(duration) as avgDuration
-      FROM usage_stats 
+      FROM usage_stats
       GROUP BY tool
       ORDER BY count DESC
     `);
 
-    return rows.map(r => ({
-      tool: r[0],
-      count: r[1],
-      errorCount: r[2],
-      avgDuration: Math.round(r[3])
+    return rows.map((r) => ({
+      tool: r[0] as string,
+      count: r[1] as number,
+      errorCount: r[2] as number,
+      avgDuration: Math.round(r[3] as number),
     }));
   }
 }

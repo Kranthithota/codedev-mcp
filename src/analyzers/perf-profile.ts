@@ -29,10 +29,10 @@ export interface PerfResult {
 
 /**
  * Parse Node.js .cpuprofile files (V8 CPU profile format).
- * @param content
- * @param file
+ * @param content - The raw CPU profile JSON content
+ * @returns Array of performance entries for hot functions
  */
-function parseCPUProfile(content: string, file: string): PerfEntry[] {
+function parseCPUProfile(content: string): PerfEntry[] {
   const entries: PerfEntry[] = [];
   try {
     const profile = JSON.parse(content);
@@ -72,15 +72,19 @@ function parseCPUProfile(content: string, file: string): PerfEntry[] {
 
 /**
  * Parse webpack stats.json for bundle analysis.
- * @param content
- * @param file
+ * @param content - The raw webpack stats JSON content
+ * @param file - The stats file path
+ * @returns Array of performance entries for bundle sizes
  */
 function parseWebpackStats(content: string, file: string): PerfEntry[] {
   const entries: PerfEntry[] = [];
   try {
     const stats = JSON.parse(content);
     const assets = stats.assets || [];
-    for (const asset of assets.sort((a: any, b: any) => b.size - a.size).slice(0, 15)) {
+    const sorted = assets
+      .sort((a: Record<string, unknown>, b: Record<string, unknown>) => (b.size as number) - (a.size as number))
+      .slice(0, 15);
+    for (const asset of sorted) {
       const sizeMB = (asset.size / (1024 * 1024)).toFixed(2);
       const severity =
         asset.size > 500_000 ? ('critical' as const) : asset.size > 200_000 ? ('warning' as const) : ('info' as const);
@@ -104,7 +108,8 @@ function parseWebpackStats(content: string, file: string): PerfEntry[] {
 
 /**
  * Analyze source file sizes.
- * @param cwd
+ * @param cwd - The working directory
+ * @returns Array of performance entries for large files
  */
 async function analyzeFileSizes(cwd: string): Promise<PerfEntry[]> {
   const entries: PerfEntry[] = [];
@@ -134,7 +139,8 @@ async function analyzeFileSizes(cwd: string): Promise<PerfEntry[]> {
 
 /**
  * Analyze heavy dependencies from package.json.
- * @param cwd
+ * @param cwd - The working directory
+ * @returns Array of performance entries for heavy dependencies
  */
 async function analyzeHeavyDeps(cwd: string): Promise<PerfEntry[]> {
   const entries: PerfEntry[] = [];
@@ -172,7 +178,8 @@ async function analyzeHeavyDeps(cwd: string): Promise<PerfEntry[]> {
 
 /**
  * Main performance analysis function.
- * @param cwd
+ * @param cwd - The working directory
+ * @returns Performance analysis results with entries and summary
  */
 export async function analyzePerformance(cwd: string): Promise<PerfResult> {
   const allEntries: PerfEntry[] = [];
@@ -184,7 +191,7 @@ export async function analyzePerformance(cwd: string): Promise<PerfResult> {
   for (const f of cpuProfiles.slice(0, 5)) {
     try {
       const content = await readFile(path.join(cwd, f), 'utf-8');
-      const entries = parseCPUProfile(content, f);
+      const entries = parseCPUProfile(content);
       if (entries.length > 0) {
         allEntries.push(...entries);
         profFiles.push(f);

@@ -96,11 +96,15 @@ export const outputSchemas = {
   file_tree: {
     tree: z.string(),
     fileCount: z.number().optional(),
-    files: z.array(z.object({
-      path: z.string(),
-      size: z.number().optional(),
-      modified: z.string().optional(),
-    })).optional(),
+    files: z
+      .array(
+        z.object({
+          path: z.string(),
+          size: z.number().optional(),
+          modified: z.string().optional(),
+        }),
+      )
+      .optional(),
   },
   find_pattern: {
     check: z.string(),

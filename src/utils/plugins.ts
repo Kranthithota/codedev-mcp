@@ -29,7 +29,7 @@ export interface PluginManifest {
 export interface PluginToolDef {
   name: string;
   description: string;
-  inputSchema: Record<string, any>;
+  inputSchema: Record<string, unknown>;
 }
 
 export interface PluginPatternDef {
@@ -50,15 +50,20 @@ export interface PluginLanguageDef {
   classPatterns?: string[];
 }
 
+export interface PluginModule {
+  tools?: Record<string, (params: Record<string, unknown>, context: { cwd: string }) => Promise<string>>;
+}
+
 export interface LoadedPlugin {
   manifest: PluginManifest;
   pluginPath: string;
-  module?: any;
+  module?: PluginModule;
 }
 
 /**
  * Discover and load plugins from standard locations + npm marketplace.
- * @param cwd
+ * @param cwd - The working directory to search for plugins.
+ * @returns An array of loaded plugins.
  */
 export async function loadPlugins(cwd: string): Promise<LoadedPlugin[]> {
   const plugins: LoadedPlugin[] = [];
@@ -91,11 +96,12 @@ export async function loadPlugins(cwd: string): Promise<LoadedPlugin[]> {
           }
 
           // Try loading the module
-          let module: any;
+          let module: PluginModule | undefined;
           const entryPoint = path.join(pluginPath, 'index.js');
           try {
             await access(entryPoint);
-            module = await import(entryPoint);
+            const importedModule = await import(entryPoint);
+            module = importedModule as PluginModule;
           } catch {
             // Plugin might not have code (pattern-only or language-only plugins)
           }
@@ -120,7 +126,8 @@ export async function loadPlugins(cwd: string): Promise<LoadedPlugin[]> {
 /**
  * Discover npm packages matching the `codedev-plugin-*` naming convention.
  * Searches node_modules in the project and globally.
- * @param cwd
+ * @param cwd - The working directory.
+ * @returns An array of loaded npm plugins.
  */
 async function discoverNpmPlugins(cwd: string): Promise<LoadedPlugin[]> {
   const plugins: LoadedPlugin[] = [];
@@ -171,7 +178,8 @@ async function discoverNpmPlugins(cwd: string): Promise<LoadedPlugin[]> {
 
 /**
  * Load a single npm marketplace plugin from its package directory.
- * @param pkgDir
+ * @param pkgDir - The package directory path.
+ * @returns The loaded plugin or null if loading failed.
  */
 async function loadNpmPlugin(pkgDir: string): Promise<LoadedPlugin | null> {
   try {
@@ -181,42 +189,43 @@ async function loadNpmPlugin(pkgDir: string): Promise<LoadedPlugin | null> {
 
     try {
       const content = await readFile(manifestPath, 'utf-8');
-      manifest = JSON.parse(content);
+      manifest = JSON.parse(content) as PluginManifest;
     } catch {
       // Fallback: read package.json and extract codedev config
       const pkgJsonPath = path.join(pkgDir, 'package.json');
       const pkgContent = await readFile(pkgJsonPath, 'utf-8');
-      const pkgJson = JSON.parse(pkgContent);
+      const pkgJson = JSON.parse(pkgContent) as Record<string, unknown>;
 
       // Plugin must have a "codedev" key in package.json
-      if (!pkgJson.codedev) return null;
+      const codedevConfig = pkgJson.codedev as Record<string, unknown> | undefined;
+      if (!codedevConfig) return null;
 
       manifest = {
-        name: pkgJson.name,
-        version: pkgJson.version,
-        description: pkgJson.description || '',
-        author: pkgJson.author,
-        tools: pkgJson.codedev.tools,
-        patterns: pkgJson.codedev.patterns,
-        languages: pkgJson.codedev.languages,
+        name: pkgJson.name as string,
+        version: pkgJson.version as string,
+        description: (pkgJson.description as string) || '',
+        author: pkgJson.author as string | undefined,
+        tools: codedevConfig.tools as PluginToolDef[] | undefined,
+        patterns: codedevConfig.patterns as PluginPatternDef[] | undefined,
+        languages: codedevConfig.languages as PluginLanguageDef[] | undefined,
       };
     }
 
     if (!manifest.name || !manifest.version) return null;
 
     // Try loading the module
-    let module: any;
+    let module: PluginModule | undefined;
     try {
       const entryPoint = path.join(pkgDir, 'index.js');
       await access(entryPoint);
-      module = await import(entryPoint);
+      module = (await import(entryPoint)) as PluginModule;
     } catch {
       // Try package.json main field
       try {
         const pkgContent = await readFile(path.join(pkgDir, 'package.json'), 'utf-8');
-        const pkgJson = JSON.parse(pkgContent);
+        const pkgJson = JSON.parse(pkgContent) as Record<string, unknown>;
         if (pkgJson.main) {
-          module = await import(path.join(pkgDir, pkgJson.main));
+          module = (await import(path.join(pkgDir, pkgJson.main as string))) as PluginModule;
         }
       } catch {
         /* no module */
@@ -231,7 +240,8 @@ async function loadNpmPlugin(pkgDir: string): Promise<LoadedPlugin | null> {
 
 /**
  * Get all custom patterns from loaded plugins.
- * @param plugins
+ * @param plugins - The loaded plugins.
+ * @returns An array of pattern definitions from all plugins.
  */
 export function getPluginPatterns(plugins: LoadedPlugin[]): PluginPatternDef[] {
   return plugins.flatMap((p) => p.manifest.patterns || []);
@@ -239,7 +249,8 @@ export function getPluginPatterns(plugins: LoadedPlugin[]): PluginPatternDef[] {
 
 /**
  * Get all custom language definitions from plugins.
- * @param plugins
+ * @param plugins - The loaded plugins.
+ * @returns An array of language definitions from all plugins.
  */
 export function getPluginLanguages(plugins: LoadedPlugin[]): PluginLanguageDef[] {
   return plugins.flatMap((p) => p.manifest.languages || []);
@@ -247,7 +258,8 @@ export function getPluginLanguages(plugins: LoadedPlugin[]): PluginLanguageDef[]
 
 /**
  * Get all custom tool definitions from plugins.
- * @param plugins
+ * @param plugins - The loaded plugins.
+ * @returns An array of tool definitions with their plugin names.
  */
 export function getPluginTools(plugins: LoadedPlugin[]): { plugin: string; tool: PluginToolDef }[] {
   return plugins.flatMap((p) => (p.manifest.tools || []).map((t) => ({ plugin: p.manifest.name, tool: t })));
@@ -255,16 +267,17 @@ export function getPluginTools(plugins: LoadedPlugin[]): { plugin: string; tool:
 
 /**
  * Execute a plugin tool handler.
- * @param plugin
- * @param toolName
- * @param params
- * @param context
- * @param context.cwd
+ * @param plugin - The loaded plugin to execute.
+ * @param toolName - The tool name to invoke.
+ * @param params - Parameters to pass to the tool.
+ * @param context - Execution context.
+ * @param context.cwd - The current working directory.
+ * @returns The string result from the tool handler.
  */
 export async function executePluginTool(
   plugin: LoadedPlugin,
   toolName: string,
-  params: Record<string, any>,
+  params: Record<string, unknown>,
   context: { cwd: string },
 ): Promise<string> {
   if (!plugin.module?.tools?.[toolName]) {
@@ -277,7 +290,8 @@ export async function executePluginTool(
 /**
  * Generate a plugin scaffold for users.
  * Produces both plugin.json (native) and package.json (npm marketplace) formats.
- * @param name
+ * @param name - The plugin name.
+ * @returns An object containing manifest, packageJson, indexJs, and readme strings.
  */
 export function generatePluginScaffold(name: string): {
   manifest: string;

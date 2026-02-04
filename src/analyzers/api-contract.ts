@@ -10,8 +10,10 @@ import path from 'node:path';
 import { logger } from '../utils/logger.js';
 
 export interface ApiEndpoint {
-  method: string; // GET, POST, PUT, DELETE, QUERY, MUTATION, SUBSCRIPTION
-  path: string; // /api/users/:id or User.name
+  /** GET, POST, PUT, DELETE, QUERY, MUTATION, SUBSCRIPTION */
+  method: string;
+  /** /api/users/:id or User.name */
+  path: string;
   file: string;
   line: number;
   parameters?: { name: string; in: string; type: string; required?: boolean }[];
@@ -32,8 +34,9 @@ export interface ApiContractResult {
 
 /**
  * Parse OpenAPI/Swagger JSON/YAML.
- * @param content
- * @param file
+ * @param content - The file content to parse.
+ * @param file - The file path.
+ * @returns Parsed API endpoints.
  */
 function parseOpenAPI(content: string, file: string): ApiEndpoint[] {
   const endpoints: ApiEndpoint[] = [];
@@ -41,23 +44,37 @@ function parseOpenAPI(content: string, file: string): ApiEndpoint[] {
     const spec = JSON.parse(content);
     const paths = spec.paths || {};
     for (const [urlPath, methods] of Object.entries(paths)) {
-      for (const [method, details] of Object.entries(methods as Record<string, any>)) {
+      for (const [method, rawDetails] of Object.entries(methods as Record<string, unknown>)) {
         if (['get', 'post', 'put', 'delete', 'patch', 'options', 'head'].includes(method)) {
-          const params = (details.parameters || []).map((p: any) => ({
-            name: p.name,
-            in: p.in,
-            type: p.schema?.type || 'unknown',
-            required: p.required,
+          const details = rawDetails as Record<string, unknown>;
+          const paramsList = (details.parameters || []) as Record<string, unknown>[];
+          const params = paramsList.map((p) => ({
+            name: p.name as string,
+            in: p.in as string,
+            type: ((p.schema as Record<string, unknown>)?.type as string) || 'unknown',
+            required: p.required as boolean | undefined,
           }));
+          const requestBody = details.requestBody as Record<string, unknown> | undefined;
+          const responses = details.responses as Record<string, Record<string, unknown>> | undefined;
           endpoints.push({
             method: method.toUpperCase(),
             path: urlPath,
             file,
             line: 0,
             parameters: params,
-            requestBody: details.requestBody?.content?.['application/json']?.schema?.$ref || undefined,
-            responseType: details.responses?.['200']?.content?.['application/json']?.schema?.$ref || undefined,
-            description: details.summary || details.description,
+            requestBody:
+              (
+                (requestBody?.content as Record<string, Record<string, { $ref?: string } | unknown>> | undefined)?.[
+                  'application/json'
+                ]?.schema as { $ref?: string } | undefined
+              )?.$ref || undefined,
+            responseType:
+              (
+                (
+                  responses?.['200']?.content as Record<string, Record<string, { $ref?: string } | unknown>> | undefined
+                )?.['application/json']?.schema as { $ref?: string } | undefined
+              )?.$ref || undefined,
+            description: (details.summary || details.description) as string | undefined,
             source: 'openapi',
           });
         }
@@ -71,12 +88,12 @@ function parseOpenAPI(content: string, file: string): ApiEndpoint[] {
 
 /**
  * Parse GraphQL schema definitions.
- * @param content
- * @param file
+ * @param content - The file content to parse.
+ * @param file - The file path.
+ * @returns Parsed API endpoints.
  */
 function parseGraphQL(content: string, file: string): ApiEndpoint[] {
   const endpoints: ApiEndpoint[] = [];
-  const lines = content.split('\n');
 
   // Find type Query, Mutation, Subscription blocks
   const typeBlockRegex = /type\s+(Query|Mutation|Subscription)\s*\{([^}]+)\}/gs;
@@ -97,14 +114,14 @@ function parseGraphQL(content: string, file: string): ApiEndpoint[] {
       if (fieldMatch) {
         const params = fieldMatch[2]
           ? fieldMatch[2].split(',').map((p) => {
-            const [name, type] = p.trim().split(/\s*:\s*/);
-            return {
-              name: name.replace('!', ''),
-              in: 'argument',
-              type: (type || 'unknown').replace('!', ''),
-              required: p.includes('!'),
-            };
-          })
+              const [name, type] = p.trim().split(/\s*:\s*/);
+              return {
+                name: name.replace('!', ''),
+                in: 'argument',
+                type: (type || 'unknown').replace('!', ''),
+                required: p.includes('!'),
+              };
+            })
           : [];
 
         endpoints.push({
@@ -125,8 +142,9 @@ function parseGraphQL(content: string, file: string): ApiEndpoint[] {
 
 /**
  * Parse Express/Fastify route definitions.
- * @param content
- * @param file
+ * @param content - The file content to parse.
+ * @param file - The file path.
+ * @returns Parsed API endpoints.
  */
 function parseExpressRoutes(content: string, file: string): ApiEndpoint[] {
   const endpoints: ApiEndpoint[] = [];
@@ -149,8 +167,9 @@ function parseExpressRoutes(content: string, file: string): ApiEndpoint[] {
 
 /**
  * Parse FastAPI route decorators.
- * @param content
- * @param file
+ * @param content - The file content to parse.
+ * @param file - The file path.
+ * @returns Parsed API endpoints.
  */
 function parseFastAPIRoutes(content: string, file: string): ApiEndpoint[] {
   const endpoints: ApiEndpoint[] = [];
@@ -187,8 +206,9 @@ function parseFastAPIRoutes(content: string, file: string): ApiEndpoint[] {
 
 /**
  * Parse NestJS controller decorators.
- * @param content
- * @param file
+ * @param content - The file content to parse.
+ * @param file - The file path.
+ * @returns Parsed API endpoints.
  */
 function parseNestJSRoutes(content: string, file: string): ApiEndpoint[] {
   const endpoints: ApiEndpoint[] = [];
@@ -215,7 +235,8 @@ function parseNestJSRoutes(content: string, file: string): ApiEndpoint[] {
 
 /**
  * Main API contract analysis function.
- * @param cwd
+ * @param cwd - The working directory to scan.
+ * @returns The API contract analysis result.
  */
 export async function analyzeApiContracts(cwd: string): Promise<ApiContractResult> {
   const allEndpoints: ApiEndpoint[] = [];

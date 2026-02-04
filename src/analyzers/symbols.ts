@@ -4,7 +4,6 @@
  */
 
 import { readFile, stat } from 'node:fs/promises';
-import path from 'node:path';
 import { detectLanguage, getSymbolPatterns, getImportPatterns, getCommentStyle } from '../utils/languages.js';
 
 export interface Symbol {
@@ -25,12 +24,14 @@ export interface FileAnalysis {
   blankLines: number;
   symbols: Symbol[];
   imports: string[];
-  complexity: number; // rough cyclomatic complexity estimate
+  /** Rough cyclomatic complexity estimate */
+  complexity: number;
 }
 
 /**
- * Extract all symbols from a file
- * @param filePath
+ * Extract all symbols from a file.
+ * @param filePath - Path to the source file
+ * @returns Array of symbols found in the file
  */
 export async function extractSymbols(filePath: string): Promise<Symbol[]> {
   const content = await readFile(filePath, 'utf-8');
@@ -71,7 +72,8 @@ export async function extractSymbols(filePath: string): Promise<Symbol[]> {
           kind,
           line,
           language,
-          signature: lineContent.slice(0, 200), // truncate long lines
+          // Truncate long lines
+          signature: lineContent.slice(0, 200),
         });
       }
     }
@@ -83,8 +85,9 @@ export async function extractSymbols(filePath: string): Promise<Symbol[]> {
 }
 
 /**
- * Extract imports from a file
- * @param filePath
+ * Extract imports from a file.
+ * @param filePath - Path to the source file
+ * @returns Array of imported module names
  */
 export async function extractImports(filePath: string): Promise<string[]> {
   const content = await readFile(filePath, 'utf-8');
@@ -104,9 +107,10 @@ export async function extractImports(filePath: string): Promise<string[]> {
 }
 
 /**
- * Count code, comment, and blank lines
- * @param content
- * @param language
+ * Count code, comment, and blank lines.
+ * @param content - The file content
+ * @param language - The programming language
+ * @returns Line counts by type
  */
 function countLineTypes(content: string, language: string): { code: number; comment: number; blank: number } {
   const lines = content.split('\n');
@@ -152,11 +156,11 @@ function countLineTypes(content: string, language: string): { code: number; comm
 }
 
 /**
- * Rough cyclomatic complexity estimate
- * @param content
- * @param language
+ * Rough cyclomatic complexity estimate.
+ * @param content - The file content
+ * @returns Estimated cyclomatic complexity score
  */
-function estimateComplexity(content: string, language: string): number {
+function estimateComplexity(content: string): number {
   // Count decision points
   const decisionKeywords = [
     /\bif\b/g,
@@ -179,7 +183,8 @@ function estimateComplexity(content: string, language: string): number {
     /\bguard\b/g,
   ];
 
-  let complexity = 1; // base complexity
+  // Base complexity
+  let complexity = 1;
   for (const pattern of decisionKeywords) {
     const matches = content.match(pattern);
     if (matches) complexity += matches.length;
@@ -189,8 +194,9 @@ function estimateComplexity(content: string, language: string): number {
 }
 
 /**
- * Full file analysis
- * @param filePath
+ * Full file analysis.
+ * @param filePath - Path to the source file
+ * @returns Complete file analysis with symbols, imports, and metrics
  */
 export async function analyzeFile(filePath: string): Promise<FileAnalysis> {
   const content = await readFile(filePath, 'utf-8');
@@ -200,7 +206,7 @@ export async function analyzeFile(filePath: string): Promise<FileAnalysis> {
   const lineCounts = countLineTypes(content, language);
   const symbols = await extractSymbols(filePath);
   const imports = await extractImports(filePath);
-  const complexity = estimateComplexity(content, language);
+  const complexity = estimateComplexity(content);
 
   return {
     path: filePath,
@@ -217,8 +223,9 @@ export async function analyzeFile(filePath: string): Promise<FileAnalysis> {
 }
 
 /**
- * Generate a concise outline of a file's structure
- * @param analysis
+ * Generate a concise outline of a file's structure.
+ * @param analysis - The file analysis result
+ * @returns Formatted string outline of the file
  */
 export function formatFileOutline(analysis: FileAnalysis): string {
   const parts: string[] = [];

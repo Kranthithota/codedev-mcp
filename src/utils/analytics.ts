@@ -35,14 +35,15 @@ export interface AnalyticsReport {
 class Analytics {
   private calls: ToolCall[] = [];
   private startTime = Date.now();
-  private maxHistory = 5000; // Keep last 5000 calls
+  /** Keep last 5000 calls */
+  private maxHistory = 5000;
 
   /**
    * Record a tool call.
-   * @param tool
-   * @param durationMs
-   * @param success
-   * @param cached
+   * @param tool - Tool name.
+   * @param durationMs - Duration in milliseconds.
+   * @param success - Whether the call succeeded.
+   * @param cached - Whether the result was from cache.
    */
   record(tool: string, durationMs: number, success: boolean, cached: boolean = false) {
     this.calls.push({ tool, timestamp: Date.now(), durationMs, success, cached });
@@ -52,22 +53,25 @@ class Analytics {
     }
 
     // Persist async (fire and forget)
-    import('../db/connection.js').then(({ getDb }) => { // Lazy import to avoid circular dep if any
-      getDb().then(db => {
-        db.logUsage(tool, durationMs, success, cached);
-        db.save().catch(() => { /* Silently ignore save errors to avoid polluting structured logs */ });
-        // save() is potentially expensive if it writes whole file. 
-        // SqliteStore writes whole file on save().
-        // We should only save periodically.
-      }).catch(() => { });
+    import('../db/connection.js').then(({ getDb }) => {
+      // Lazy import to avoid circular dep if any
+      getDb()
+        .then((db) => {
+          db.logUsage(tool, durationMs, success, cached);
+          db.save().catch(() => {
+            /* Silently ignore save errors to avoid polluting structured logs */
+          });
+        })
+        .catch(() => {});
     });
   }
 
   /**
    * Wrap an async tool handler with timing and recording.
-   * @param tool
-   * @param fn
-   * @param cached
+   * @param tool - Tool name.
+   * @param fn - The async function to wrap.
+   * @param cached - Whether the result is from cache.
+   * @returns The result of the wrapped function.
    */
   async track<T>(tool: string, fn: () => Promise<T>, cached: boolean = false): Promise<T> {
     const start = Date.now();
@@ -81,7 +85,10 @@ class Analytics {
     }
   }
 
-  /** Get full analytics report. */
+  /**
+   * Get full analytics report.
+   * @returns The analytics report with uptime, totals, and per-tool stats.
+   */
   getReport(): AnalyticsReport {
     const uptimeMs = Date.now() - this.startTime;
     const hours = Math.floor(uptimeMs / 3600000);
@@ -134,7 +141,10 @@ class Analytics {
     };
   }
 
-  /** Get suggested actions based on analytics and codebase state. */
+  /**
+   * Get suggested actions based on analytics and codebase state.
+   * @returns A list of suggested actions.
+   */
   getSuggestedActions(): string[] {
     const suggestions: string[] = [];
     const report = this.getReport();

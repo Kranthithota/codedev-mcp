@@ -194,8 +194,9 @@ function parseGitLabCI(content: string, file: string): CICDPipeline {
 }
 
 /**
- *
- * @param cwd
+ * Parse CI/CD pipeline configurations from the project directory.
+ * @param cwd - The working directory to scan.
+ * @returns The parsed CI/CD configuration result.
  */
 export async function parseCICD(cwd: string): Promise<CICDResult> {
   const pipelines: CICDPipeline[] = [];
