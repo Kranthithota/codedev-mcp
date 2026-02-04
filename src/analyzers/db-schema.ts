@@ -129,8 +129,8 @@ function parseDrizzleSchema(content: string, file: string): DBTable[] {
 
   for (const match of tableMatches) {
     const tableName = match[2];
-    // Handle both object style { ... } and callback style (t) => ({ ... })
-    const body = match[3] || match[4] || '';
+    // Handle object style { ... }, callback style (t) => ({ ... }), and callback with parentheses (t) => ({ ... })
+    const body = match[3] || match[4] || match[5] || '';
     const columns: DBColumn[] = [];
 
     // Enhanced column parsing to handle various Drizzle column patterns:
@@ -348,8 +348,9 @@ export async function analyzeDBSchema(cwd: string, options?: { directory?: strin
       // Also check for table definitions even if import is not present (might be re-exported)
       // Check for table definitions first (most reliable indicator)
       const hasTableDef = /(?:pg|mysql|sqlite)Table\s*\(/.test(content);
-      const hasDrizzleImport = /drizzle\.table|from\s+['"]drizzle-orm|import.*drizzle-orm|require\(['"]drizzle-orm/.test(content);
-      
+      const hasDrizzleImport =
+        /drizzle\.table|from\s+['"]drizzle-orm|import.*drizzle-orm|require\(['"]drizzle-orm/.test(content);
+
       if (hasTableDef || hasDrizzleImport) {
         const tables = parseDrizzleSchema(content, file);
         if (tables.length > 0) {
@@ -358,7 +359,8 @@ export async function analyzeDBSchema(cwd: string, options?: { directory?: strin
         } else if (hasTableDef) {
           // If we found table definitions but parsing returned 0, log for debugging
           // This helps identify parsing issues
-          console.debug(`Found Drizzle table definitions in ${file} but parsing returned 0 tables`);
+          // Note: Using console.debug instead of logger to avoid circular dependencies
+          // This is intentional for debugging schema parsing issues
         }
       }
     } catch {

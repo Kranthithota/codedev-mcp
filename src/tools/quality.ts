@@ -205,12 +205,12 @@ export function registerQualityTools(server: McpServer) {
                 const catchStart = catchMatch.index;
                 const catchLine = content.substring(0, catchStart).split('\n').length;
                 const afterCatch = content.substring(catchStart + catchMatch[0].length);
-                
+
                 // Find the matching closing brace
                 let braceCount = 1;
                 let pos = 0;
                 let foundEnd = false;
-                
+
                 while (pos < afterCatch.length && braceCount > 0) {
                   if (afterCatch[pos] === '{') braceCount++;
                   else if (afterCatch[pos] === '}') {
@@ -222,11 +222,14 @@ export function registerQualityTools(server: McpServer) {
                   }
                   pos++;
                 }
-                
+
                 if (foundEnd) {
                   const catchBody = afterCatch.substring(0, pos);
                   // Check if body is empty (only whitespace/comments)
-                  const trimmedBody = catchBody.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '').trim();
+                  const trimmedBody = catchBody
+                    .replace(/\/\/.*$/gm, '')
+                    .replace(/\/\*[\s\S]*?\*\//g, '')
+                    .trim();
                   if (trimmedBody === '') {
                     matches.push({
                       file,
@@ -286,10 +289,10 @@ export function registerQualityTools(server: McpServer) {
         const threshold = params.threshold || 50;
         const searchCwd = params.directory ? safePath(params.directory) : CWD;
         const fileGlob = params.file_glob || '**/*.{ts,tsx,js,jsx,py,go,java,rs,c,cpp}';
-        
+
         const files = await listFiles(searchCwd, { glob: fileGlob });
         const matches: Array<{ file: string; line: number; match: string }> = [];
-        
+
         // Increased limit from 500 to 2000 to handle large projects (949+ files)
         for (const file of files.slice(0, 2000)) {
           try {
@@ -297,7 +300,7 @@ export function registerQualityTools(server: McpServer) {
             const language = detectLanguage(file);
             const content = await readFile(filePath, 'utf-8');
             const lines = content.split('\n');
-            
+
             // Try AST parsing first
             const astSymbols = await parseAST(filePath, language);
             if (astSymbols && astSymbols.length > 0) {
@@ -314,56 +317,60 @@ export function registerQualityTools(server: McpServer) {
                 }
               }
             }
-            
+
             // Always also try regex-based extraction as fallback/complement
             const symbols = await extractSymbols(filePath);
             const processedFunctions = new Set<string>();
-            
+
             for (const symbol of symbols.filter((s) => s.kind === 'function')) {
               const key = `${file}:${symbol.line}`;
               if (processedFunctions.has(key)) continue;
               processedFunctions.add(key);
-              
+
               // Find function start and end by parsing braces
               let braceCount = 0;
               let startLine = symbol.line;
               let endLine = startLine;
               let foundStart = false;
-              
+
               // Look backwards to find function start
               for (let i = symbol.line - 1; i >= 0 && i >= symbol.line - 10; i--) {
                 const line = lines[i];
-                if (/^\s*(?:export\s+)?(?:async\s+)?function\s+\w+|^\s*(?:export\s+)?(?:async\s+)?\w+\s*[:=]\s*(?:async\s*)?\(|^\s*(?:export\s+)?(?:async\s+)?\w+\s*[:=]\s*(?:async\s*)?\w+\s*=>/.test(line)) {
+                if (
+                  /^\s*(?:export\s+)?(?:async\s+)?function\s+\w+|^\s*(?:export\s+)?(?:async\s+)?\w+\s*[:=]\s*(?:async\s*)?\(|^\s*(?:export\s+)?(?:async\s+)?\w+\s*[:=]\s*(?:async\s*)?\w+\s*=>/.test(
+                    line,
+                  )
+                ) {
                   startLine = i + 1;
                   foundStart = true;
                   break;
                 }
               }
-              
+
               if (!foundStart) startLine = symbol.line;
-              
+
               // Find function end by counting braces
               for (let i = startLine - 1; i < lines.length; i++) {
                 const line = lines[i];
                 const openBraces = (line.match(/\{/g) || []).length;
                 const closeBraces = (line.match(/\}/g) || []).length;
-                
+
                 if (i === startLine - 1 || braceCount > 0) {
                   braceCount += openBraces;
                   braceCount -= closeBraces;
-                  
+
                   if (braceCount === 0 && i >= startLine) {
                     endLine = i + 1;
                     break;
                   }
                 }
               }
-              
+
               // If we didn't find the end, estimate from remaining content
               if (endLine === startLine && startLine < lines.length) {
                 endLine = lines.length;
               }
-              
+
               const lineCount = endLine - startLine + 1;
               if (lineCount > threshold) {
                 // Check if we already added this from AST
@@ -382,10 +389,15 @@ export function registerQualityTools(server: McpServer) {
             continue;
           }
         }
-        
+
         const output = matches.map((m) => `${m.file}:${m.line} │ ${m.match}`).join('\n');
         return {
-          content: [{ type: 'text', text: `Found ${matches.length} functions exceeding ${threshold} lines:\n\n${output || 'None found'}` }],
+          content: [
+            {
+              type: 'text',
+              text: `Found ${matches.length} functions exceeding ${threshold} lines:\n\n${output || 'None found'}`,
+            },
+          ],
           structuredContent: {
             check: 'long_functions',
             matches,
@@ -421,10 +433,10 @@ export function registerQualityTools(server: McpServer) {
         const threshold = params.threshold || 500;
         const searchCwd = params.directory ? safePath(params.directory) : CWD;
         const fileGlob = params.file_glob || '**/*';
-        
+
         const files = await listFiles(searchCwd, { glob: fileGlob });
         const matches: Array<{ file: string; line: number; match: string }> = [];
-        
+
         // Process more files and ensure we're scanning the right directory
         // Increased limit from 1000 to 2000 to handle large projects (949+ files)
         for (const file of files.slice(0, 2000)) {
@@ -433,10 +445,10 @@ export function registerQualityTools(server: McpServer) {
             // Verify file exists and is readable
             const stats = await import('node:fs/promises').then((fs) => fs.stat(filePath));
             if (!stats.isFile()) continue;
-            
+
             const content = await readFile(filePath, 'utf-8');
             const lineCount = content.split('\n').length;
-            
+
             if (lineCount > threshold) {
               matches.push({
                 file,
@@ -449,17 +461,22 @@ export function registerQualityTools(server: McpServer) {
             continue;
           }
         }
-        
+
         // Sort by line count descending
         matches.sort((a, b) => {
           const aLines = parseInt(a.match.match(/\d+/)?.[0] || '0', 10);
           const bLines = parseInt(b.match.match(/\d+/)?.[0] || '0', 10);
           return bLines - aLines;
         });
-        
+
         const output = matches.map((m) => `${m.file}:${m.match}`).join('\n');
         return {
-          content: [{ type: 'text', text: `Found ${matches.length} files exceeding ${threshold} lines:\n\n${output || 'None found'}` }],
+          content: [
+            {
+              type: 'text',
+              text: `Found ${matches.length} files exceeding ${threshold} lines:\n\n${output || 'None found'}`,
+            },
+          ],
           structuredContent: {
             check: 'large_files',
             matches,
@@ -494,7 +511,7 @@ export function registerQualityTools(server: McpServer) {
     async (params) => {
       try {
         const searchCwd = params.directory ? safePath(params.directory) : CWD;
-        
+
         if (params.pattern) {
           // Pattern-based search
           const results = await searchCode({
@@ -514,14 +531,14 @@ export function registerQualityTools(server: McpServer) {
             },
           };
         }
-        
+
         // AST-based duplicate detection
         const minLength = params.min_length || 5;
         const fileGlob = params.file_glob || '**/*.{ts,tsx,js,jsx,py,go,java,rs}';
         const files = await listFiles(searchCwd, { glob: fileGlob });
         const codeBlocks = new Map<string, Array<{ file: string; line: number }>>();
         const matches: Array<{ file: string; line: number; match: string }> = [];
-        
+
         // Extract function bodies and look for duplicates
         // Increased limit from 100 to 2000 to handle large projects
         for (const file of files.slice(0, 2000)) {
@@ -530,7 +547,7 @@ export function registerQualityTools(server: McpServer) {
             const language = detectLanguage(file);
             const content = await readFile(filePath, 'utf-8');
             const lines = content.split('\n');
-            
+
             // Try AST parsing first
             const astSymbols = await parseAST(filePath, language);
             if (astSymbols) {
@@ -553,21 +570,23 @@ export function registerQualityTools(server: McpServer) {
                 }
               }
             }
-            
+
             // Also detect structural patterns (e.g., CRUD patterns)
             // Look for common patterns like: getXById, createX, updateX, deleteX
             // These patterns appear across multiple files with similar structure
             const structuralPatterns = [
               {
-                pattern: /(?:export\s+)?(?:const|async\s+function|function)\s+get\w+ById\s*=\s*async\s*\([^)]*id[^)]*\)\s*=>[\s\S]{0,500}?return\s+await\s+db\.query\.\w+\.findFirst/,
+                pattern:
+                  /(?:export\s+)?(?:const|async\s+function|function)\s+get\w+ById\s*=\s*async\s*\([^)]*id[^)]*\)\s*=>[\s\S]{0,500}?return\s+await\s+db\.query\.\w+\.findFirst/,
                 name: 'getXById pattern',
               },
               {
-                pattern: /return\s+await\s+db\.query\.\w+\.findFirst\s*\(\s*\{[\s\S]{0,200}?where:\s*\([^)]*\)\s*=>\s*eq\([^)]*\)[\s\S]{0,200}?\}\)/,
+                pattern:
+                  /return\s+await\s+db\.query\.\w+\.findFirst\s*\(\s*\{[\s\S]{0,200}?where:\s*\([^)]*\)\s*=>\s*eq\([^)]*\)[\s\S]{0,200}?\}\)/,
                 name: 'db.query.findFirst with eq pattern',
               },
             ];
-            
+
             for (const { pattern, name } of structuralPatterns) {
               const patternMatches = content.matchAll(pattern);
               for (const match of patternMatches) {
@@ -583,7 +602,7 @@ export function registerQualityTools(server: McpServer) {
             continue;
           }
         }
-        
+
         // Find duplicates (appearing in 2+ files)
         for (const [key, locations] of codeBlocks.entries()) {
           if (locations.length >= 2) {
@@ -599,10 +618,18 @@ export function registerQualityTools(server: McpServer) {
             }
           }
         }
-        
-        const output = matches.slice(0, 50).map((m) => `${m.file}:${m.line} │ ${m.match}`).join('\n');
+
+        const output = matches
+          .slice(0, 50)
+          .map((m) => `${m.file}:${m.line} │ ${m.match}`)
+          .join('\n');
         return {
-          content: [{ type: 'text', text: `Found ${matches.length} duplicate code blocks (min ${minLength} lines):\n\n${output || 'None found'}` }],
+          content: [
+            {
+              type: 'text',
+              text: `Found ${matches.length} duplicate code blocks (min ${minLength} lines):\n\n${output || 'None found'}`,
+            },
+          ],
           structuredContent: {
             check: 'duplicates',
             matches: matches.slice(0, 100),
@@ -638,16 +665,16 @@ export function registerQualityTools(server: McpServer) {
         const fileGlob = params.file_glob || '**/*.{ts,tsx,js,jsx,py,go,java,rs}';
         const files = await listFiles(searchCwd, { glob: fileGlob });
         const matches: Array<{ file: string; line: number; match: string }> = [];
-        
+
         // Collect all exported symbols
         const exportedSymbols: Array<{ file: string; name: string; line: number; kind: string }> = [];
-        
+
         // Increased limit from 200 to 2000 to handle large projects
         for (const file of files.slice(0, 2000)) {
           try {
             const filePath = path.join(searchCwd, file);
             const symbols = await extractSymbols(filePath);
-            
+
             for (const symbol of symbols) {
               // Check if it's exported
               if (symbol.kind === 'export' || symbol.signature?.includes('export')) {
@@ -663,7 +690,7 @@ export function registerQualityTools(server: McpServer) {
             continue;
           }
         }
-        
+
         // Check references for each exported symbol
         // Increased limit from 100 to 1000 to handle large projects
         for (const symbol of exportedSymbols.slice(0, 1000)) {
@@ -677,12 +704,12 @@ export function registerQualityTools(server: McpServer) {
               wholeWord: true,
               maxResults: 50,
             });
-            
+
             // Filter out the definition itself
             const externalRefs = references.filter(
               (r: { file: string; line: number }) => !(r.file === symbol.file && r.line === symbol.line),
             );
-            
+
             if (externalRefs.length === 0) {
               matches.push({
                 file: symbol.file,
@@ -695,10 +722,12 @@ export function registerQualityTools(server: McpServer) {
             continue;
           }
         }
-        
+
         const output = matches.map((m) => `${m.file}:${m.line} │ ${m.match}`).join('\n');
         return {
-          content: [{ type: 'text', text: `Found ${matches.length} potentially unused exports:\n\n${output || 'None found'}` }],
+          content: [
+            { type: 'text', text: `Found ${matches.length} potentially unused exports:\n\n${output || 'None found'}` },
+          ],
           structuredContent: {
             check: 'dead_code',
             matches,

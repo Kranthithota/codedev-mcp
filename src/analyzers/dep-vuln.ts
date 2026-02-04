@@ -291,7 +291,9 @@ async function runNpmAudit(cwd: string): Promise<VulnDependency[] | null> {
 
         // Get CVE or advisory info
         const via = info.via || [];
-        const cveInfo = via.find((v) => typeof v === 'object' && v.title) as { title?: string; url?: string } | undefined;
+        const cveInfo = via.find((v) => typeof v === 'object' && v.title) as
+          | { title?: string; url?: string }
+          | undefined;
         const reason = cveInfo?.title || via.find((v) => typeof v === 'string') || 'Known vulnerability';
 
         // Get fix recommendation
@@ -324,7 +326,7 @@ async function runNpmAudit(cwd: string): Promise<VulnDependency[] | null> {
     }
 
     return vulns;
-  } catch (error) {
+  } catch {
     // npm audit might fail if:
     // - npm is not installed
     // - package.json doesn't exist
@@ -350,7 +352,7 @@ export async function scanDependencyVulns(cwd: string): Promise<DepVulnResult> {
   // Try npm audit first for accurate vulnerability detection
   const npmAuditVulns = await runNpmAudit(cwd);
   const hasNpmAuditResults = npmAuditVulns && npmAuditVulns.length > 0;
-  
+
   if (hasNpmAuditResults) {
     vulnerabilities.push(...npmAuditVulns);
     ecosystems.add('npm');
@@ -394,7 +396,7 @@ export async function scanDependencyVulns(cwd: string): Promise<DepVulnResult> {
       }
     }
   }
-  
+
   // Always count total deps from lock file if it exists
   if (hasNpmAuditResults) {
     try {
