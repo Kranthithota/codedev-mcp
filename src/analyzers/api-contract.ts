@@ -1040,15 +1040,21 @@ export async function analyzeApiContracts(cwd: string): Promise<ApiContractResul
     }
   }
 
-  // Express/NestJS routes - prioritize route files
+  // Express/NestJS routes - be less restrictive with file filtering
+  // Check all TypeScript files, not just those matching route patterns
+  // Many projects organize routes differently
   const routeFiles = tsFiles.filter(
     (f) =>
-      /routes?|controllers?|api|endpoints?/i.test(f) || /\.route\.(ts|js)$/i.test(f) || /_routes?\.(ts|js)$/i.test(f),
+      /routes?|controllers?|api|endpoints?|handlers?/i.test(f) || 
+      /\.route\.(ts|js)$/i.test(f) || 
+      /_routes?\.(ts|js)$/i.test(f) ||
+      /index\.(ts|js)$/i.test(f), // Also check index files which often aggregate routes
   );
   const otherTsFiles = tsFiles.filter((f) => !routeFiles.includes(f));
 
   // Check route files first (more likely to contain routes)
   // Increased limit from 500 to 2000 to handle large projects
+  // Process all files, not just route files, to catch routes defined anywhere
   for (const f of [...routeFiles, ...otherTsFiles].slice(0, 2000)) {
     try {
       const content = await readFile(path.join(cwd, f), 'utf-8');

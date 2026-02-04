@@ -1,4 +1,4 @@
-export const SERVER_INSTRUCTIONS = `codedev-mcp provides comprehensive, read-only access to the local codebase with 42 tools across 9 categories.
+export const SERVER_INSTRUCTIONS = `codedev-mcp provides comprehensive, read-only access to the local codebase with 42 tools across 11 categories.
 
 ## Tool Categories
 
@@ -8,9 +8,10 @@ export const SERVER_INSTRUCTIONS = `codedev-mcp provides comprehensive, read-onl
 - **find_references** — Trace symbol usage
 - **semantic_search** — Concept-based search ("authentication logic")
 
-### Analysis (5 tools)
+### Analysis (6 tools)
 - **codebase_map** — Project structure, languages, frameworks
 - **analyze_file** — Detailed file analysis with imports
+- **dependency_graph** — Import relationships and dependencies
 - **call_graph** — Who-calls-what analysis
 - **code_metrics** — Complexity, function lengths
 - **test_coverage** — What's tested

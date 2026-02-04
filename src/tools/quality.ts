@@ -421,7 +421,7 @@ export function registerQualityTools(server: McpServer) {
     {
       description: 'Find files that exceed a line count threshold.',
       inputSchema: {
-        threshold: z.number().optional().describe('Line count threshold (default: 500)'),
+        threshold: z.number().optional().describe('Line count threshold (default: 300)'),
         file_glob: z.string().optional().describe('Filter by file pattern'),
         directory: z.string().optional().describe('Subdirectory to search'),
       },
@@ -430,7 +430,7 @@ export function registerQualityTools(server: McpServer) {
     },
     async (params) => {
       try {
-        const threshold = params.threshold || 500;
+        const threshold = params.threshold || 300;
         const searchCwd = params.directory ? safePath(params.directory) : CWD;
         const fileGlob = params.file_glob || '**/*';
 

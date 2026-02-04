@@ -126,11 +126,47 @@ function parseDrizzleSchema(content: string, file: string): DBTable[] {
   const tableMatches = content.matchAll(
     /(?:export\s+(?:const|default|function|async\s+function)\s+)?(\w+)\s*=\s*(?:pg|mysql|sqlite)Table\s*\(\s*['"`]([^'"`]+)['"`]\s*,\s*(?:\{([\s\S]*?)\}|\([^)]*\)\s*=>\s*\{([\s\S]*?)\}|\([^)]*\)\s*=>\s*\(([\s\S]*?)\))\s*\)/g,
   );
-
+  
+  // Also try a more lenient pattern for edge cases
+  const lenientTableMatches = content.matchAll(
+    /(?:export\s+)?(?:const|let|var)\s+(\w+)\s*=\s*(?:pg|mysql|sqlite)Table\s*\(/gi,
+  );
+  
+  // Collect all matches
+  const allMatches: Array<{ name: string; body: string; tableName: string }> = [];
+  
   for (const match of tableMatches) {
-    const tableName = match[2];
+    allMatches.push({
+      name: match[1],
+      tableName: match[2],
+      body: match[3] || match[4] || match[5] || '',
+    });
+  }
+  
+  // For lenient matches, try to extract table name and body
+  for (const match of lenientTableMatches) {
+    // Skip if already captured by strict pattern
+    if (allMatches.some(m => m.name === match[1])) continue;
+    
+    // Try to extract the table name and body from the content after the match
+    const afterMatch = content.substring(match.index! + match[0].length);
+    const tableNameMatch = afterMatch.match(/['"`]([^'"`]+)['"`]/);
+    if (tableNameMatch) {
+      const tableName = tableNameMatch[1];
+      // Try to extract body (simplified - just get content between next parens/braces)
+      const bodyMatch = afterMatch.match(/,\s*(\{[\s\S]*?\}|\([^)]*\)\s*=>\s*\{[\s\S]*?\}|\([^)]*\)\s*=>\s*\([\s\S]*?\))/);
+      allMatches.push({
+        name: match[1],
+        tableName,
+        body: bodyMatch ? bodyMatch[1] : '',
+      });
+    }
+  }
+
+  for (const match of allMatches) {
+    const tableName = match.tableName;
     // Handle object style { ... }, callback style (t) => ({ ... }), and callback with parentheses (t) => ({ ... })
-    const body = match[3] || match[4] || match[5] || '';
+    const body = match.body;
     const columns: DBColumn[] = [];
 
     // Enhanced column parsing to handle various Drizzle column patterns:
