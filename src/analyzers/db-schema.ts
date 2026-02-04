@@ -111,56 +111,108 @@ function parsePrismaSchema(content: string, file: string): DBTable[] {
   return tables;
 }
 
+/**
+ * Extract a balanced brace-delimited block starting from the given position.
+ * Handles nested braces correctly (e.g., `{ a: func({ x: 1 }), b: 2 }`).
+ *
+ * @param content - The full source content.
+ * @param startIndex - Index of the opening brace.
+ * @param openChar - Opening brace character (default '{').
+ * @param closeChar - Closing brace character (default '}').
+ * @returns The content between the braces (excluding the braces themselves), or null if unbalanced.
+ */
+function extractBalancedBlock(content: string, startIndex: number, openChar = '{', closeChar = '}'): string | null {
+  if (content[startIndex] !== openChar) return null;
+  let depth = 1;
+  let i = startIndex + 1;
+  // Track string context to avoid counting braces inside strings
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+  let inTemplate = false;
+
+  while (i < content.length && depth > 0) {
+    const ch = content[i];
+    const prev = i > 0 ? content[i - 1] : '';
+
+    // Handle escape sequences
+    if (prev === '\\') {
+      i++;
+      continue;
+    }
+
+    // Track string boundaries
+    if (ch === "'" && !inDoubleQuote && !inTemplate) {
+      inSingleQuote = !inSingleQuote;
+    } else if (ch === '"' && !inSingleQuote && !inTemplate) {
+      inDoubleQuote = !inDoubleQuote;
+    } else if (ch === '`' && !inSingleQuote && !inDoubleQuote) {
+      inTemplate = !inTemplate;
+    } else if (!inSingleQuote && !inDoubleQuote && !inTemplate) {
+      if (ch === openChar) depth++;
+      else if (ch === closeChar) depth--;
+    }
+    if (depth > 0) i++;
+  }
+
+  if (depth !== 0) return null;
+  return content.substring(startIndex + 1, i);
+}
+
 function parseDrizzleSchema(content: string, file: string): DBTable[] {
   const tables: DBTable[] = [];
-  // Enhanced regex to match various Drizzle table patterns:
-  // - pgTable('name', { ... })
-  // - mysqlTable('name', { ... })
-  // - sqliteTable('name', { ... })
-  // - Also matches with or without 'export const'
-  // - Handles both single-line and multi-line table definitions
-  // - Supports callback style: pgTable('name', (t) => ({ ... }))
-  // - Supports: export const table = pgTable(...) or const table = pgTable(...)
-  // - More flexible whitespace handling
-  // - Handles: export const studentSectorMappingTable = mysqlTable('student_sector_mapping', { id: varchar(...) })
-  const tableMatches = content.matchAll(
-    /(?:export\s+(?:const|default|function|async\s+function)\s+)?(\w+)\s*=\s*(?:pg|mysql|sqlite)Table\s*\(\s*['"`]([^'"`]+)['"`]\s*,\s*(?:\{([\s\S]*?)\}|\([^)]*\)\s*=>\s*\{([\s\S]*?)\}|\([^)]*\)\s*=>\s*\(([\s\S]*?)\))\s*\)/g,
-  );
-  
-  // Also try a more lenient pattern for edge cases
-  const lenientTableMatches = content.matchAll(
-    /(?:export\s+)?(?:const|let|var)\s+(\w+)\s*=\s*(?:pg|mysql|sqlite)Table\s*\(/gi,
-  );
-  
-  // Collect all matches
+
+  // Find all table definitions using a start-of-match regex, then extract
+  // the body using balanced brace matching (handles nested {} correctly).
+  // Matches patterns like:
+  //   export const foo = pgTable('name', { ... })
+  //   const bar = mysqlTable('name', { ... })
+  //   export const baz = sqliteTable('name', (t) => ({ ... }))
+  const tableStartRegex =
+    /(?:export\s+)?(?:const|let|var)\s+(\w+)\s*=\s*(?:pg|mysql|sqlite)Table\s*\(\s*['"`]([^'"`]+)['"`]\s*,\s*/gi;
+
   const allMatches: Array<{ name: string; body: string; tableName: string }> = [];
-  
-  for (const match of tableMatches) {
-    allMatches.push({
-      name: match[1],
-      tableName: match[2],
-      body: match[3] || match[4] || match[5] || '',
-    });
-  }
-  
-  // For lenient matches, try to extract table name and body
-  for (const match of lenientTableMatches) {
-    // Skip if already captured by strict pattern
-    if (allMatches.some(m => m.name === match[1])) continue;
-    
-    // Try to extract the table name and body from the content after the match
-    const afterMatch = content.substring(match.index! + match[0].length);
-    const tableNameMatch = afterMatch.match(/['"`]([^'"`]+)['"`]/);
-    if (tableNameMatch) {
-      const tableName = tableNameMatch[1];
-      // Try to extract body (simplified - just get content between next parens/braces)
-      const bodyMatch = afterMatch.match(/,\s*(\{[\s\S]*?\}|\([^)]*\)\s*=>\s*\{[\s\S]*?\}|\([^)]*\)\s*=>\s*\([\s\S]*?\))/);
-      allMatches.push({
-        name: match[1],
-        tableName,
-        body: bodyMatch ? bodyMatch[1] : '',
-      });
+  let startMatch;
+
+  while ((startMatch = tableStartRegex.exec(content)) !== null) {
+    const varName = startMatch[1];
+    const tableName = startMatch[2];
+    const afterComma = startMatch.index + startMatch[0].length;
+
+    // Determine body style: object literal { ... } or callback (t) => ({ ... }) / (t) => { ... }
+    let body = '';
+    const nextChar = content[afterComma];
+
+    if (nextChar === '{') {
+      // Object literal style: pgTable('name', { columns... })
+      const extracted = extractBalancedBlock(content, afterComma);
+      if (extracted !== null) body = extracted;
+    } else if (nextChar === '(') {
+      // Callback style: pgTable('name', (t) => ({ ... })) or (t) => { ... }
+      // Skip past the callback params to find the body
+      const arrowMatch = content.substring(afterComma).match(/\([^)]*\)\s*=>\s*/);
+      if (arrowMatch) {
+        const bodyStart = afterComma + arrowMatch[0].length;
+        const bodyChar = content[bodyStart];
+        if (bodyChar === '(' || bodyChar === '{') {
+          const extracted = extractBalancedBlock(
+            content,
+            bodyStart,
+            bodyChar,
+            bodyChar === '(' ? ')' : '}',
+          );
+          if (extracted !== null) {
+            // If wrapped in parens like ({ ... }), extract the inner braces
+            body = extracted;
+            if (body.trim().startsWith('{')) {
+              const innerExtracted = extractBalancedBlock(body.trimStart(), 0);
+              if (innerExtracted !== null) body = innerExtracted;
+            }
+          }
+        }
+      }
     }
+
+    allMatches.push({ name: varName, tableName, body });
   }
 
   for (const match of allMatches) {

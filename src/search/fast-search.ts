@@ -150,7 +150,12 @@ async function searchWithRipgrep(opts: SearchOptions): Promise<SearchResult[]> {
       timeout: 30000,
     });
 
-    return parseRipgrepJson(stdout, opts.cwd);
+    const results = parseRipgrepJson(stdout, opts.cwd);
+    // --max-count is per-file in ripgrep, so we also cap total results
+    if (opts.maxResults && results.length > opts.maxResults) {
+      return results.slice(0, opts.maxResults);
+    }
+    return results;
   } catch (error: unknown) {
     if (isExitCodeError(error) && error.code === 1) return [];
     if (error instanceof Error) {
@@ -299,6 +304,71 @@ export interface ListOptions {
 }
 
 /**
+ * Expand shell-style brace patterns into individual strings.
+ * e.g., "*.{ts,js}" → ["*.ts", "*.js"]
+ * Handles nested braces recursively.
+ */
+function expandBraces(pattern: string): string[] {
+  const match = pattern.match(/^(.*?)\{([^}]+)\}(.*)$/);
+  if (!match) return [pattern];
+  const [, prefix, alternatives, suffix] = match;
+  const result: string[] = [];
+  for (const alt of alternatives.split(',')) {
+    result.push(...expandBraces(`${prefix}${alt.trim()}${suffix}`));
+  }
+  return result;
+}
+
+/**
+ * Convert a glob pattern to `find` command arguments.
+ * Handles ** wildcards and brace expansion that `find -name` doesn't support natively.
+ *
+ * - `find -name` only matches the basename and doesn't support ** or {a,b}
+ * - `find -path` matches the full path; in GNU find, * in -path matches /
+ *
+ * @param glob - The glob pattern to convert.
+ * @returns Array of find arguments (e.g., ['-name', '*.ts'] or ['(', '-name', '*.ts', '-o', '-name', '*.js', ')'])
+ */
+function globToFindArgs(glob: string): string[] {
+  const expanded = expandBraces(glob);
+  const conditions: string[][] = [];
+
+  for (const pattern of expanded) {
+    // Strip leading **/ since find is recursive by default
+    let cleaned = pattern.replace(/^\*\*\//, '');
+    // Replace remaining **/ with empty string — in GNU find -path, * already matches /
+    cleaned = cleaned.replace(/\*\*\//g, '');
+    // Replace standalone ** with *
+    cleaned = cleaned.replace(/\*\*/g, '*');
+
+    if (cleaned.includes('/')) {
+      // Pattern has path components — use -path
+      // Prefix with */ so it matches from any depth under the find root
+      if (!cleaned.startsWith('./') && !cleaned.startsWith('/')) {
+        cleaned = '*/' + cleaned;
+      }
+      conditions.push(['-path', cleaned]);
+    } else {
+      // Simple filename pattern — use -name
+      conditions.push(['-name', cleaned]);
+    }
+  }
+
+  if (conditions.length === 1) {
+    return conditions[0];
+  }
+
+  // Multiple conditions joined with -o (OR)
+  const args: string[] = ['('];
+  for (let i = 0; i < conditions.length; i++) {
+    if (i > 0) args.push('-o');
+    args.push(...conditions[i]);
+  }
+  args.push(')');
+  return args;
+}
+
+/**
  * Lists files in a directory using 'fd' or 'find'.
  *
  * @param cwd - Directory to search in.
@@ -358,7 +428,9 @@ export async function listFiles(cwd: string, options?: ListOptions): Promise<str
     else if (options?.type === 'dir') findArgs.push('-type', 'd');
 
     if (options?.glob) {
-      findArgs.push('-name', options.glob);
+      // Use globToFindArgs to properly handle **, brace expansion, and path patterns
+      // that find's -name flag doesn't support natively
+      findArgs.push(...globToFindArgs(options.glob));
     }
     findArgs.push('-print');
 
