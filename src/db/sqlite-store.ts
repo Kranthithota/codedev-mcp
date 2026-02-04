@@ -39,6 +39,8 @@ export class SqliteStore {
   private db: SqlJsDatabase | null = null;
   private dirty = false;
   private SQL: SqlJsStatic | null = null;
+  private saveTimeout: NodeJS.Timeout | null = null;
+  private readonly AUTO_SAVE_DELAY = 2000; // Save 2 seconds after last update
 
   /**
    * Create a new SqliteStore instance.
@@ -214,6 +216,28 @@ export class SqliteStore {
   }
 
   /**
+   * Schedule an automatic save after a delay.
+   * Debounces multiple rapid updates into a single save operation.
+   */
+  private scheduleAutoSave(): void {
+    // Clear existing timeout
+    if (this.saveTimeout) {
+      clearTimeout(this.saveTimeout);
+    }
+
+    // Schedule save after delay
+    this.saveTimeout = setTimeout(async () => {
+      try {
+        await this.save();
+      } catch (error) {
+        // Silently ignore save errors to avoid breaking tool execution
+        console.error('Auto-save failed:', error);
+      }
+      this.saveTimeout = null;
+    }, this.AUTO_SAVE_DELAY);
+  }
+
+  /**
    * Initialize a new empty database.
    * @param _ - The working directory (unused, kept for interface compatibility).
    */
@@ -257,6 +281,7 @@ export class SqliteStore {
       file.size,
     ]);
     this.dirty = true;
+    this.scheduleAutoSave();
   }
 
   /**
@@ -277,6 +302,7 @@ export class SqliteStore {
       ]);
     }
     this.dirty = true;
+    this.scheduleAutoSave();
   }
 
   /**
@@ -291,6 +317,7 @@ export class SqliteStore {
       this.execute(`INSERT INTO imports (file, import_path) VALUES (?, ?)`, [filePath, imp]);
     }
     this.dirty = true;
+    this.scheduleAutoSave();
   }
 
   /**
@@ -365,6 +392,7 @@ export class SqliteStore {
     this.execute(`DELETE FROM symbols WHERE file = ?`, [filePath]);
     this.execute(`DELETE FROM imports WHERE file = ?`, [filePath]);
     this.dirty = true;
+    this.scheduleAutoSave();
   }
 
   /**
@@ -388,8 +416,25 @@ export class SqliteStore {
 
   /**
    * Close the database.
+   * Saves any pending changes before closing.
    */
-  close(): void {
+  async close(): Promise<void> {
+    // Clear any pending auto-save
+    if (this.saveTimeout) {
+      clearTimeout(this.saveTimeout);
+      this.saveTimeout = null;
+    }
+
+    // Save any pending changes
+    if (this.dirty) {
+      try {
+        await this.save();
+      } catch (error) {
+        // Log but don't throw - we're closing anyway
+        console.error('Error saving database on close:', error);
+      }
+    }
+
     if (this.db) {
       this.db.close();
       this.db = null;
@@ -413,6 +458,7 @@ export class SqliteStore {
       cached ? 1 : 0,
     ]);
     this.dirty = true;
+    this.scheduleAutoSave();
   }
 
   /**

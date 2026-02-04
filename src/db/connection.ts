@@ -31,7 +31,7 @@ export async function getDb(): Promise<SqliteStore> {
  */
 export async function closeDb(): Promise<void> {
   if (dbInstance) {
-    dbInstance.close();
+    await dbInstance.close();
     dbInstance = null;
   }
 }
