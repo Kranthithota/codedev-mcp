@@ -269,17 +269,78 @@ Or with docker-compose:
 PROJECT_DIR=/path/to/project docker-compose up
 ```
 
-### Version Pinning
+### Installation Methods
 
-`npx -y codedev-mcp` always fetches the latest version. For stability in CI/CD or team environments, pin a version:
-
-```bash
-npx -y codedev-mcp@3.1.0
+#### Method 1: Using npx (Recommended)
+`npx -y codedev-mcp` automatically downloads and runs the latest version. No installation needed:
+```json
+{
+  "mcpServers": {
+    "codedev": {
+      "command": "npx",
+      "args": ["-y", "codedev-mcp"]
+    }
+  }
+}
 ```
 
-Or install globally:
+#### Method 2: Local Installation (Project-specific)
+Install in your project for version control:
 ```bash
-npm install -g codedev-mcp@3.1.0
+npm install codedev-mcp
+```
+
+Then configure using `npx` (works with local installs too):
+```json
+{
+  "mcpServers": {
+    "codedev": {
+      "command": "npx",
+      "args": ["-y", "codedev-mcp"]
+    }
+  }
+}
+```
+
+Or reference directly (project-specific config):
+```json
+{
+  "mcpServers": {
+    "codedev": {
+      "command": "node",
+      "args": ["./node_modules/codedev-mcp/dist/index.js"],
+      "cwd": "${workspaceFolder}"
+    }
+  }
+}
+```
+
+#### Method 3: Global Installation
+Install globally for system-wide access:
+```bash
+npm install -g codedev-mcp
+```
+
+Then configure:
+```json
+{
+  "mcpServers": {
+    "codedev": {
+      "command": "codedev-mcp"
+    }
+  }
+}
+```
+
+#### Version Pinning
+To pin a specific version with npx:
+```bash
+npx -y codedev-mcp@3.2.1
+```
+
+Or install a specific version locally:
+```bash
+npm install codedev-mcp@3.2.1
 ```
 
 ## Working Directory
