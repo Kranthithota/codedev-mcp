@@ -18,12 +18,14 @@ describe('Branch Compare', () => {
     await exec('git', ['init'], { cwd: tempDir });
     await exec('git', ['config', 'user.email', 'test@test.com'], { cwd: tempDir });
     await exec('git', ['config', 'user.name', 'Test'], { cwd: tempDir });
+    // Disable commit signing for test repo (CI/sandbox environments may enforce signing)
+    await exec('git', ['config', 'commit.gpgSign', 'false'], { cwd: tempDir });
 
     // Create initial commit on main
     await writeFile(join(tempDir, 'file1.ts'), 'export const a = 1;\n');
     await writeFile(join(tempDir, 'file2.ts'), 'export const b = 2;\n');
     await exec('git', ['add', '.'], { cwd: tempDir });
-    await exec('git', ['commit', '-m', 'initial'], { cwd: tempDir });
+    await exec('git', ['commit', '--no-gpg-sign', '-m', 'initial'], { cwd: tempDir });
 
     // Create feature branch
     await exec('git', ['checkout', '-b', 'feature'], { cwd: tempDir });
@@ -33,7 +35,7 @@ describe('Branch Compare', () => {
     // Modify existing file
     await writeFile(join(tempDir, 'file1.ts'), 'export const a = "modified";\n');
     await exec('git', ['add', '.'], { cwd: tempDir });
-    await exec('git', ['commit', '-m', 'feature changes'], { cwd: tempDir });
+    await exec('git', ['commit', '--no-gpg-sign', '-m', 'feature changes'], { cwd: tempDir });
 
     // Go back to main and make a change (for behind/ahead testing)
     await exec('git', ['checkout', 'main'], { cwd: tempDir }).catch(() =>
@@ -41,7 +43,7 @@ describe('Branch Compare', () => {
     );
     await writeFile(join(tempDir, 'file2.ts'), 'export const b = "main change";\n');
     await exec('git', ['add', '.'], { cwd: tempDir });
-    await exec('git', ['commit', '-m', 'main change'], { cwd: tempDir });
+    await exec('git', ['commit', '--no-gpg-sign', '-m', 'main change'], { cwd: tempDir });
   });
 
   afterAll(async () => {

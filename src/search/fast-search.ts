@@ -79,6 +79,7 @@ export function resetRgAvailability(): void {
  * @returns A promise resolving to an array of search results.
  */
 export async function searchCode(opts: SearchOptions): Promise<SearchResult[]> {
+  if (!opts.pattern) return [];
   if (await isRgAvailable()) {
     return searchWithRipgrep(opts);
   }

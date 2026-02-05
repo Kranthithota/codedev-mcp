@@ -1,9 +1,21 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { checkArchitecture } from '../../../src/analyzers/architecture.js';
 import { analyzeApiContracts } from '../../../src/analyzers/api-contract.js';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 describe('Architecture Tools - Core Functions', () => {
     const CWD = process.cwd();
+    let emptyDir: string;
+
+    beforeAll(async () => {
+        emptyDir = await mkdtemp(join(tmpdir(), 'arch-test-'));
+    });
+
+    afterAll(async () => {
+        await rm(emptyDir, { recursive: true, force: true });
+    });
 
     describe('checkArchitecture', () => {
         it('should analyze architecture and return result', async () => {
@@ -48,7 +60,7 @@ describe('Architecture Tools - Core Functions', () => {
 
     describe('Edge Cases', () => {
         it('should handle empty directory gracefully', async () => {
-            const result = await checkArchitecture('/tmp');
+            const result = await checkArchitecture(emptyDir);
 
             expect(result).toBeDefined();
             expect(result.violations).toBeDefined();

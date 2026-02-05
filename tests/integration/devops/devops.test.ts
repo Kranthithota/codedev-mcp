@@ -1,10 +1,22 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { analyzeIaC } from '../../../src/analyzers/iac.js';
 import { parseCICD } from '../../../src/analyzers/cicd.js';
 import { analyzeMonorepo } from '../../../src/analyzers/monorepo.js';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 describe('DevOps Tools - Core Functions', () => {
     const CWD = process.cwd();
+    let emptyDir: string;
+
+    beforeAll(async () => {
+        emptyDir = await mkdtemp(join(tmpdir(), 'devops-test-'));
+    });
+
+    afterAll(async () => {
+        await rm(emptyDir, { recursive: true, force: true });
+    });
 
     describe('analyzeIaC', () => {
         it('should analyze infrastructure configurations', async () => {
@@ -97,20 +109,20 @@ describe('DevOps Tools - Core Functions', () => {
 
     describe('Edge Cases', () => {
         it('should handle directory with no IaC files', async () => {
-            const result = await analyzeIaC('/tmp');
+            const result = await analyzeIaC(emptyDir);
 
             expect(result.resources).toHaveLength(0);
             expect(result.platform).toHaveLength(0);
         });
 
         it('should handle directory with no CI/CD configs', async () => {
-            const result = await parseCICD('/tmp');
+            const result = await parseCICD(emptyDir);
 
             expect(result.pipelines).toHaveLength(0);
         });
 
         it('should handle non-monorepo directory', async () => {
-            const result = await analyzeMonorepo('/tmp');
+            const result = await analyzeMonorepo(emptyDir);
 
             expect(result.type).toBe('none');
         });

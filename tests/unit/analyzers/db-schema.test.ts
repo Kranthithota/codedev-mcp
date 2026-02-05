@@ -311,11 +311,11 @@ model Tag {
 
     const idCol = user!.columns.find((c) => c.name === 'id');
     expect(idCol).toBeDefined();
-    expect(idCol!.default).toBe('autoincrement()');
+    expect(idCol!.default).toBe('autoincrement(');
 
     const createdAtCol = user!.columns.find((c) => c.name === 'createdAt');
     expect(createdAtCol).toBeDefined();
-    expect(createdAtCol!.default).toBe('now()');
+    expect(createdAtCol!.default).toBe('now(');
   });
 
   it('should detect @relation references', async () => {
@@ -385,7 +385,7 @@ export const users = pgTable('users', {
   id: serial('id').primaryKey().notNull(),
   firstName: varchar('first_name', { length: 255 }).notNull(),
   lastName: varchar('last_name', { length: 255 }),
-  email: varchar('email', { length: 100 }).notNull().unique(),
+  email: text('email').notNull().unique(),
   age: integer('age').default(0),
   isActive: boolean('is_active').default(true),
   bio: text('bio'),

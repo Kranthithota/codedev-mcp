@@ -1,8 +1,20 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { detectDeadCode } from '../../../src/analyzers/dead-code.js';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 describe('Quality Tools - Core Functions', () => {
     const CWD = process.cwd();
+    let emptyDir: string;
+
+    beforeAll(async () => {
+        emptyDir = await mkdtemp(join(tmpdir(), 'quality-test-'));
+    });
+
+    afterAll(async () => {
+        await rm(emptyDir, { recursive: true, force: true });
+    });
 
     describe('detectDeadCode', () => {
         it('should analyze codebase for dead code', async () => {
@@ -42,7 +54,7 @@ describe('Quality Tools - Core Functions', () => {
 
     describe('Edge Cases', () => {
         it('should handle empty directory', async () => {
-            const result = await detectDeadCode('/tmp');
+            const result = await detectDeadCode(emptyDir);
 
             expect(result.unusedExports).toHaveLength(0);
             expect(result.summary.filesScanned).toBe(0);
