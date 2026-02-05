@@ -335,6 +335,254 @@ export const outputSchemas = {
     installed: z.boolean().optional(),
     data: z.record(z.unknown()).optional(),
   },
+  // ── New Category Tools (Categories 1-13) ─────────────────────────────
+
+  // Category 1: PR Review Intelligence
+  pr_review_context: {
+    summary: z.record(z.unknown()),
+    commits: z.array(z.object({ hash: z.string(), message: z.string(), author: z.string() })),
+    changedFiles: z.array(z.object({ file: z.string(), status: z.string(), riskLevel: z.string() })),
+    reviewFocusAreas: z.array(z.string()),
+  },
+  review_risk_score: {
+    overallScore: z.number(),
+    grade: z.string(),
+    dimensions: z.array(z.object({ name: z.string(), score: z.number(), weight: z.number() })),
+    recommendations: z.array(z.string()),
+  },
+  breaking_change_detect: {
+    breakingChanges: z.array(z.object({ file: z.string(), type: z.string(), severity: z.string(), description: z.string() })),
+    summary: z.object({ total: z.number(), errors: z.number(), warnings: z.number() }),
+  },
+
+  // Category 2: Test Intelligence
+  test_gap_analysis: {
+    gaps: z.array(z.object({ sourceFile: z.string(), hasTestFile: z.boolean(), riskLevel: z.string() })),
+    summary: z.record(z.unknown()),
+    recommendations: z.array(z.string()),
+  },
+  test_impact_analysis: {
+    impacts: z.array(z.object({ changedFile: z.string(), directTests: z.array(z.string()) })),
+    allTestsToRun: z.array(z.string()),
+    estimatedScope: z.string(),
+  },
+  test_health_report: {
+    totalTestFiles: z.number(),
+    antiPatterns: z.array(z.object({ file: z.string(), pattern: z.string(), severity: z.string() })),
+    healthScore: z.number(),
+    grade: z.string(),
+  },
+  test_to_code_mapping: {
+    mappings: z.array(z.object({ sourceFile: z.string(), testFiles: z.array(z.string()), confidence: z.string() })),
+    orphanTests: z.array(z.string()),
+    untestedFiles: z.array(z.string()),
+    summary: z.record(z.unknown()),
+  },
+
+  // Category 3: Codebase Health Dashboard
+  codebase_health_dashboard: {
+    overallScore: z.number(),
+    overallGrade: z.string(),
+    dimensions: z.array(z.object({ name: z.string(), score: z.number(), grade: z.string() })),
+    topRisks: z.array(z.string()),
+    quickWins: z.array(z.string()),
+    stats: z.record(z.unknown()),
+  },
+
+  // Category 4: Governance & Compliance
+  governance_rules: {
+    violations: z.array(z.object({ ruleId: z.string(), file: z.string(), severity: z.string(), message: z.string() })),
+    summary: z.record(z.unknown()),
+  },
+  license_audit: {
+    projectLicense: z.string(),
+    dependencies: z.array(z.object({ package: z.string(), license: z.string(), category: z.string(), risk: z.string() })),
+    summary: z.record(z.unknown()),
+    issues: z.array(z.string()),
+  },
+  supply_chain_risk: {
+    overallRisk: z.number(),
+    grade: z.string(),
+    risks: z.array(z.object({ package: z.string(), riskScore: z.number(), riskFactors: z.array(z.string()) })),
+    recommendations: z.array(z.string()),
+  },
+  secret_rotation_audit: {
+    findings: z.array(z.object({ file: z.string(), type: z.string(), severity: z.string(), description: z.string() })),
+    score: z.number(),
+    grade: z.string(),
+    summary: z.record(z.unknown()),
+  },
+
+  // Category 5: Cross-Repository Intelligence
+  cross_repo_impact: {
+    impacts: z.array(z.object({ changedPackage: z.string(), affectedPackages: z.array(z.object({ name: z.string(), riskLevel: z.string() })) })),
+    summary: z.record(z.unknown()),
+    recommendations: z.array(z.string()),
+  },
+  contract_drift: {
+    drifts: z.array(z.object({ type: z.string(), endpoint: z.string(), status: z.string(), severity: z.string() })),
+    summary: z.record(z.unknown()),
+    recommendations: z.array(z.string()),
+  },
+  dependency_impact_matrix: {
+    packages: z.array(z.object({ package: z.string(), riskScore: z.number(), riskLevel: z.string(), consumers: z.array(z.string()) })),
+    hotspots: z.array(z.string()),
+    summary: z.record(z.unknown()),
+  },
+
+  // Category 6: Architecture Enforcement
+  architecture_drift: {
+    violations: z.array(z.object({ from: z.record(z.string()), to: z.record(z.string()), type: z.string(), severity: z.string() })),
+    layers: z.array(z.object({ name: z.string(), files: z.number() })),
+    summary: z.record(z.unknown()),
+  },
+  migration_tracker: {
+    migrations: z.array(z.object({ name: z.string(), completionPercent: z.number(), status: z.string() })),
+    summary: z.record(z.unknown()),
+    recommendations: z.array(z.string()),
+  },
+  auth_flow_analysis: {
+    endpoints: z.array(z.object({ route: z.string(), method: z.string(), hasAuth: z.boolean() })),
+    unprotectedEndpoints: z.array(z.object({ route: z.string(), method: z.string() })),
+    summary: z.record(z.unknown()),
+    recommendations: z.array(z.string()),
+  },
+
+  // Category 7: Onboarding & Knowledge
+  onboarding_guide: {
+    projectName: z.string(),
+    projectType: z.string(),
+    techStack: z.array(z.string()),
+    sections: z.array(z.object({ title: z.string(), content: z.string() })),
+    setupSteps: z.array(z.string()),
+  },
+  convention_detector: {
+    conventions: z.array(z.object({ category: z.string(), name: z.string(), value: z.string(), confidence: z.number() })),
+    summary: z.string(),
+  },
+  codebase_glossary: {
+    terms: z.array(z.object({ term: z.string(), category: z.string(), occurrences: z.number() })),
+    summary: z.record(z.unknown()),
+  },
+
+  // Category 8: Documentation Intelligence
+  doc_staleness: {
+    staleItems: z.array(z.object({ docFile: z.string(), issue: z.string(), severity: z.string() })),
+    summary: z.record(z.unknown()),
+    recommendations: z.array(z.string()),
+  },
+  doc_coverage: {
+    undocumented: z.array(z.object({ file: z.string(), name: z.string(), type: z.string() })),
+    coverage: z.object({ documented: z.number(), undocumented: z.number(), percentage: z.number() }),
+    overallScore: z.number(),
+    grade: z.string(),
+  },
+  changelog_generator: {
+    entries: z.array(z.object({ hash: z.string(), type: z.string(), description: z.string() })),
+    markdown: z.string(),
+    summary: z.record(z.unknown()),
+  },
+  api_doc_generator: {
+    endpoints: z.array(z.object({ method: z.string(), path: z.string(), file: z.string() })),
+    exportedFunctions: z.array(z.object({ name: z.string(), file: z.string(), signature: z.string() })),
+    markdown: z.string(),
+    summary: z.record(z.unknown()),
+  },
+
+  // Category 9: Performance & Runtime Patterns
+  n_plus_one_detect: {
+    patterns: z.array(z.object({ file: z.string(), line: z.number(), ormMethod: z.string(), suggestion: z.string() })),
+    summary: z.record(z.unknown()),
+  },
+  async_pattern_analysis: {
+    antiPatterns: z.array(z.object({ file: z.string(), line: z.number(), pattern: z.string(), severity: z.string() })),
+    score: z.number(),
+    recommendations: z.array(z.string()),
+  },
+  bundle_analysis: {
+    dependencies: z.array(z.object({ name: z.string(), estimatedSize: z.string() })),
+    treeShakingOpportunities: z.array(z.object({ file: z.string(), suggestion: z.string() })),
+    summary: z.record(z.unknown()),
+  },
+  memory_leak_patterns: {
+    patterns: z.array(z.object({ file: z.string(), line: z.number(), type: z.string(), severity: z.string() })),
+    score: z.number(),
+    recommendations: z.array(z.string()),
+  },
+
+  // Category 10: Observability & Operations
+  observability_audit: {
+    findings: z.array(z.object({ category: z.string(), status: z.string(), details: z.string() })),
+    score: z.number(),
+    grade: z.string(),
+    recommendations: z.array(z.string()),
+  },
+  error_handling_analysis: {
+    issues: z.array(z.object({ file: z.string(), line: z.number(), type: z.string(), severity: z.string() })),
+    score: z.number(),
+    grade: z.string(),
+    recommendations: z.array(z.string()),
+  },
+  logging_consistency: {
+    issues: z.array(z.object({ file: z.string(), line: z.number(), type: z.string(), severity: z.string() })),
+    framework: z.string(),
+    score: z.number(),
+    grade: z.string(),
+  },
+  feature_flag_audit: {
+    flags: z.array(z.object({ name: z.string(), framework: z.string(), isStale: z.boolean() })),
+    summary: z.record(z.unknown()),
+    recommendations: z.array(z.string()),
+  },
+
+  // Category 11: Tech Debt Tracking
+  tech_debt_burndown: {
+    snapshots: z.array(z.object({ date: z.string(), totalDebt: z.number() })),
+    trend: z.string(),
+    summary: z.record(z.unknown()),
+    recommendations: z.array(z.string()),
+  },
+  code_age_heatmap: {
+    files: z.array(z.object({ file: z.string(), ageMonths: z.number(), riskScore: z.number(), riskLevel: z.string() })),
+    hotspots: z.array(z.object({ file: z.string(), riskScore: z.number() })),
+    summary: z.record(z.unknown()),
+  },
+  change_pattern_analysis: {
+    patterns: z.array(z.object({ type: z.string(), files: z.array(z.string()), significance: z.string() })),
+    churnHotspots: z.array(z.object({ file: z.string(), changes: z.number() })),
+    summary: z.record(z.unknown()),
+  },
+
+  // Category 12: MCP-Native Features
+  tool_presets: {
+    presets: z.array(z.object({ name: z.string(), description: z.string(), toolCount: z.number() })),
+    workflows: z.array(z.object({ name: z.string(), description: z.string(), stepCount: z.number() })),
+  },
+  composite_workflow: {
+    workflow: z.string(),
+    results: z.array(z.object({ tool: z.string(), status: z.string() })),
+    summary: z.string(),
+    duration: z.number(),
+  },
+
+  // Category 13: Environment & Config Intelligence
+  env_config_analyzer: {
+    variables: z.array(z.object({ name: z.string(), isSensitive: z.boolean() })),
+    envFiles: z.array(z.object({ file: z.string(), gitignored: z.boolean() })),
+    score: z.number(),
+    summary: z.record(z.unknown()),
+  },
+  config_file_intelligence: {
+    configs: z.array(z.object({ file: z.string(), type: z.string(), purpose: z.string() })),
+    conflicts: z.array(z.object({ file1: z.string(), file2: z.string(), description: z.string() })),
+    summary: z.record(z.unknown()),
+  },
+  dependency_freshness: {
+    dependencies: z.array(z.object({ name: z.string(), currentVersion: z.string(), freshnessScore: z.number() })),
+    overallScore: z.number(),
+    grade: z.string(),
+    recommendations: z.array(z.string()),
+  },
 } as const;
 
 // Type helper: get the schema shape for a tool name

@@ -13,6 +13,7 @@
  *             Copilot, Windsurf, Claude Desktop — any MCP client.
  *
  * Supports: 40+ programming languages, any codebase size.
+ * 90+ tools across 24 categories.
  */
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -64,6 +65,15 @@ import { registerDevOpsTools } from './tools/devops.js';
 import { registerPerformanceTools } from './tools/performance.js';
 import { registerScaffoldTools } from './tools/scaffold.js';
 
+// v4.0 Tool Registries
+import { registerReviewTools } from './tools/review.js';
+import { registerTestingTools } from './tools/testing.js';
+import { registerHealthTools } from './tools/health.js';
+import { registerKnowledgeTools } from './tools/knowledge.js';
+import { registerPatternTools } from './tools/patterns.js';
+import { registerTrackingTools } from './tools/tracking.js';
+import { registerPlatformTools } from './tools/platform.js';
+
 import { VERSION } from './version.js';
 import { SERVER_INSTRUCTIONS } from './constants/instructions.js';
 import { registerHealthResource } from './resources/health.js';
@@ -108,6 +118,15 @@ registerDevOpsTools(server);
 registerPerformanceTools(server);
 registerScaffoldTools(server);
 
+// v4.0 Tool Categories
+registerReviewTools(server);
+registerTestingTools(server);
+registerHealthTools(server);
+registerKnowledgeTools(server);
+registerPatternTools(server);
+registerTrackingTools(server);
+registerPlatformTools(server);
+
 // Register Resources
 registerHealthResource(server, VERSION);
 
@@ -123,7 +142,7 @@ async function runServer(): Promise<void> {
   try {
     const { getDb } = await import('./db/connection.js');
     await getDb();
-    logger.info('codedev-mcp server running on stdio', { version: '3.1.0', db: 'initialized' });
+    logger.info('codedev-mcp server running on stdio', { version: VERSION, db: 'initialized' });
   } catch (err) {
     logger.warn('Failed to initialize database', { error: err });
   }
